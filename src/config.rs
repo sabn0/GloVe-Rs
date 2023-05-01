@@ -9,6 +9,10 @@ use std::io::prelude::*;
 use flate2::{Compression, read::{GzDecoder}};
 use flate2::write::GzEncoder;
 
+//
+// Some of the implementation of save file and read file are not used at the moment
+//
+
 #[derive(Clone, Debug)]
 pub struct JsonTrain {
     pub vocab_size: usize,
@@ -183,6 +187,7 @@ pub fn save_output<S: SaveFile>(output_dir: &str, file_name: &str, item: S) -> R
     return Ok(())
 
 }
+
 
 pub trait ReadFile {
     type Error;
