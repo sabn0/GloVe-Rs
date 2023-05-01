@@ -1,6 +1,6 @@
 
 use std::{error::Error, ops::Range, collections::HashMap};
-use ndarray::{prelude::*};
+use ndarray::{prelude::*, concatenate};
 // use ndarray_linalg::{Eigh, UPLO};
 use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
@@ -17,23 +17,22 @@ pub struct Similarity {
 impl Similarity {
 
     pub fn new(w: &mut Array2<f32>, t2i: HashMap<String, usize>) -> Similarity {
+        
+        // w is of shape (vocab_size, embedding_dim)
 
         // need to normalize w so each entry norm l2 is 1
         for mut row in w.axis_iter_mut(Axis(0)) {
             let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
             row.mapv_inplace(|a| (a / norm).abs());
         }
+        assert!(*w.max().unwrap() <= 1.0);
+        assert!(*w.min().unwrap() >= 0.0);
 
-        let w_max = *w.max().unwrap();
-        let w_min = *w.min().unwrap();
-        assert!(w_max <= 1.0);
-        assert!(w_min >= 0.0);
-
+        // get the reverse map of t2i
         let mut i2t: HashMap<usize, String> = HashMap::new();
         for (t, i) in &t2i {
             i2t.entry(*i).or_insert(t.to_owned());
         }
-
 
         Self {
             w: w.clone(),
@@ -42,25 +41,34 @@ impl Similarity {
         }
     }
 
-    pub fn draw_tokens_2d(&self, save_to: &str, k: usize) -> Result<(), Box<dyn Error>> {
+    pub fn draw_tokens_2d(&self, save_to: &str, k: usize, use_tokens: Option<Vec<String>>) -> Result<(), Box<dyn Error>> {
       
-        const MARGIN: u32 = 15;
-        const FONT_STYLE: (&str, i32) = ("sans-serif", 15);
+        // Instead of implementating a PCA I am going to plot on the x axis the mean of the vectors
+        // and on the y axis the max of the vectors.
 
-        // get plotting data
-        let (tokens, w) = self.select_random_tokens(k)?;
-        let projection = self.get_2dim_projections("first_two", &w)?;
-        let w_max = *projection.max()?;
-        let w_min = *projection.min()?;
-        assert!(w_max <= 1.0);
-        assert!(w_min >= 0.0);
+        const MARGIN: u32 = 15;
+        const FONT_STYLE: (&str, i32) = ("sans-serif", 20);
+
+        let (tokens, sliced_w) = match use_tokens {
+            Some(use_tokens) => {
+                let indices = use_tokens.iter().map(|t| self.t2i.get(t).unwrap().to_owned()).collect::<Vec<usize>>();
+                self.slice_weights(k, Some(indices))?
+            },
+            None => {
+                self.slice_weights(k, None)?
+            }
+        };
+
+        // get plotting data, projection should be of shape (k, 2)
+
+        let (projections, axes) = self.get_2dim_projections(&sliced_w)?;
 
         let root_area = BitMapBackend::new(save_to, (640, 640)).into_drawing_area();
         root_area.fill(&WHITE)?;
 
         // weights are normalized thus values between 0 and 1
-        let x_spec: Range<f32> = Range{start: w_min, end: w_max};
-        let y_spec: Range<f32> = Range{start: w_min, end: w_max};
+        let x_spec: Range<f32> = Range{start: axes[0], end: axes[1]};
+        let y_spec: Range<f32> = Range{start: axes[2], end: axes[3]};
 
         // x axis is removed thus doesn't need much space compared to y axis
         let mut chart = ChartBuilder::on(&root_area)
@@ -90,15 +98,17 @@ impl Similarity {
                 + Circle::new((0, 0), 3, ShapeStyle::from(&BLACK).filled())
                 + Text::new(
                     token,
-                    (10, 10),
+                    (0, 10),
                     &text_style,
                 );
         };
 
         for i in 0..tokens.len() {
-            let positions = projection.slice(s![i, ..]).to_slice().unwrap();
-            let token = tokens.get(i).unwrap();
-            chart.plotting_area().draw(&position_and_word(positions[0], positions[1], token.to_string()))?;
+            let token = tokens.get(i).unwrap().to_string();
+            // positions should be of shape (2,), from (k, 2)
+            let positions: Array1<f32> = projections.slice(s![i, ..]).to_owned();
+            assert_eq!(positions.dim(), 2);
+            chart.plotting_area().draw(&position_and_word(positions[0], positions[1], token))?;
         }
 
         chart.plotting_area().present()?;
@@ -106,77 +116,48 @@ impl Similarity {
 
     }
 
-    pub fn get_2dim_projections(&self, p_type: &str, w: &Array2<f32>) -> Result<Array2<f32>, Box<dyn Error>> {
+    pub fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
 
-        match p_type {
-            "first_two" => {
-                let o: Range<usize> = 0..2;
-                let sliced = w.slice(s![.., o]);
-                return Ok(sliced.to_owned());
-            },/*
-            "pca" => {
+        assert_eq!(self.w.dim().0, self.t2i.len(), "inconsistent number of entries in w and tokens");
+        assert!(k > 0, "k most be positive");
 
-                // centeralizing the weights
-                let means = w.mean_axis(Axis(0)).unwrap();
-                for mut row in w.axis_iter_mut(Axis(0)) {
-                    row -= &means;
-                }
+        let indices = match indices {
+            Some(indices) => indices,
+            None => (0..self.t2i.len()).choose_multiple(&mut thread_rng(), k)
+        };
+        
+        // slice w and tokens ( maintain order ?)
+        let sliced_w: Array2<f32> = self.w.select(Axis(0), &indices);
+        let tokens: Vec<String> = indices.iter().map(|i| self.i2t.get(i).unwrap().to_string()).collect();
 
-                // calculate eigenvalues and eigenvectors
-                let cov = w.t().dot(w).mapv(|x| x * (1 / w.dim().0) as f32);
-                let (eigs, vecs) = cov.eigh(UPLO::Lower).unwrap();
-                
-                // get the first and second largest eigs positions
-                // could be modified with ------------ndarray_stats --------------
-                let mut top_eigs: [f32; 2] = [-f32::INFINITY + f32::EPSILON, -f32::INFINITY];
-                let mut vec_indices: [usize; 2] = [0, 0];
-                for (i, eig_value) in eigs.iter().enumerate() {
-                    if *eig_value > top_eigs[0] {
-                        top_eigs[0] = *eig_value;
-                        vec_indices[0] = i;
-                        top_eigs[1] = top_eigs[0];
-                        vec_indices[1] = vec_indices[0];
-                    } else if *eig_value > top_eigs[1] {
-                        top_eigs[1] = *eig_value;
-                        vec_indices[1] = i;
-                    }
-                }
-                let largest_vecs = vecs.select(Axis(1), &vec_indices);
-                
-                // projection of the vectors to first to pcs
-                // this array is of size (k,2) 
-                let projection = w.dot(&largest_vecs);
-                return Ok(projection)
-            },*/
-            _ => panic!("unrecognized pattern {}", p_type)
-        }
-
+        assert_eq!(tokens.len(), sliced_w.dim().0);
+        return Ok((tokens, sliced_w))
 
     }
 
-    pub fn select_random_tokens(&self, k: usize) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
+    pub fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
 
-        assert_eq!(self.w.dim().0, self.t2i.len(), "inconsistent number of entries in w and tokens");
-        assert!(k>0, "k most be positive");
+        // w is of shape (k, embedding_dim), should return a slice (k, 2) with the max and mean values
+        let (k, _) = &w.dim();
 
-        // choose random k indices between 0 and vocab size
-        let n = self.t2i.len();
-        let mut rng = thread_rng();        
-        let mut random_indices = (0..n).choose_multiple(&mut rng, k);
-        random_indices.sort();
+        // means and maxs should be of shape (k, 1)
+        let means: Array2<f32> = w.mean_axis(Axis(1)).ok_or("problem in mean")?.to_shape((*k, 1usize))?.to_owned();
+        let maxs: Array2<f32> = w.map_axis(Axis(1), |v| { 
+            *v.iter()
+            .max_by(|x, y| x.partial_cmp(y).ok_or("problem in partial_cmp").unwrap())
+            .ok_or("problem in max").unwrap()
+        }).to_shape((*k, 1usize))?.to_owned();
 
-        // slice k and w for those random indices
-        let mut w: Array2<f32> = Array2::zeros((k, self.w.dim().1));
-        let mut tokens: Vec<String> = Vec::new();
-        for (j, i) in random_indices.iter().enumerate() {
-            w.slice_mut(s![j, ..]).assign(&self.w.slice(s![*i, ..]));
-            let token = self.i2t.get(i).unwrap();
-            tokens.push(token.to_owned());
-        }
+        // get min and max values for axes
+        let x_max = *means.max()?;
+        let x_min = *means.min()?;
+        let y_max = *maxs.max()?;
+        let y_min = *maxs.min()?;
 
-        assert_eq!(tokens.len(), w.dim().0);
-        return Ok((tokens, w))
-
+        // create slice (k, 2)
+        let projections: Array2<f32>  = concatenate![Axis(1), means, maxs];
+        let epsi = 0.00;
+        Ok((projections, [x_min-epsi, x_max+epsi, y_min-epsi, y_max+epsi]))
     }
 
     pub fn extract_analogy_vec(&self, inputs: [&str; 3]) -> Result<Array1<f32>, Box<dyn Error>> {
@@ -300,25 +281,27 @@ mod tests {
 
         // run similarity test
         let sim_obj = Similarity::new(&mut w, t2i);
-        let token = "sun";
+        let tokens = ["sun", "student", "basketball", "tree", "singing", "drove", "pretty", "surprised"];
         let k = 10;
-        let vec = sim_obj.extract_vec_from_word(token).unwrap();
 
-        println!("searching {} most similar words to {}", k, token);
-        
-        match sim_obj.find_k_most_similar(&vec, k) {
-            Ok(analogies) => {
-                for (i, (analogy, score)) in analogies.iter().enumerate() {
-                    println!("{} : {} ? {} = {}", i, token, analogy, score);  
-                }
-            }, 
-            Err(e) => panic!("{}", e)
-        };
+        for token in tokens {
 
+            println!("searching {} most similar words to {}", k, token);
+            let vec = sim_obj.extract_vec_from_word(token).unwrap();
+
+            match sim_obj.find_k_most_similar(&vec, k) {
+                Ok(analogies) => {
+                    for (i, (analogy, score)) in analogies.iter().enumerate() {
+                        println!("{} : {} ? {} = {}", i, token, analogy, score);  
+                    }
+                }, 
+                Err(e) => panic!("{}", e)
+            };
+        }
     }
 
     #[test]
-    fn plot_tokens() {
+    fn plot_tokens_rand() {
 
         // read weights and tokens
         let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
@@ -330,10 +313,31 @@ mod tests {
 
         // run similarity test
         let sim_obj = Similarity::new(&mut w, t2i);
-        if let Err(e) = sim_obj.draw_tokens_2d(format!("{}/0.png", output_dir).as_ref(), 100) {
+        let saved_to = format!("{}/2d-rand.png", output_dir);
+        if let Err(e) = sim_obj.draw_tokens_2d(&saved_to, 100, None) {
             panic!("{}", e);
         }
+    }
 
+    #[test]
+    fn plot_tokens_manual() {
 
+        // read weights and tokens
+        let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
+        let mut w = config::read_input::<Array2<f32>>(WEIGHTS_PATH).unwrap();
+
+        // create output folder
+        let output_dir = "Img";
+        if let Err(e) = fs::create_dir_all(output_dir) { panic!("{}", e) }
+
+        // run similarity test
+        let sim_obj = Similarity::new(&mut w, t2i);
+        let saved_to = format!("{}/2d-manual.png", output_dir);
+        let tokens = [
+            "girl", "boy", "new", "old", "young", "dog", "dogs", "hold", "holds", "woman", "man", "tall", "short"
+        ].iter().map(|x| x.to_string()).collect::<Vec<String>>();
+        if let Err(e) = sim_obj.draw_tokens_2d(&saved_to, 100, Some(tokens)) {
+            panic!("{}", e);
+        }
     }
 }
