@@ -10,7 +10,6 @@ use std::error::Error;
 use rayon::{prelude::*, ThreadPoolBuilder};
 use crate::config::{JsonTypes, self};
 
-
 pub struct Counts {}
 
 impl Counts {
@@ -88,14 +87,11 @@ impl Counts {
     }
 
 
-    fn count(window_size: i32, sequences: &Vec<Vec<String>>, tup2cooc: &mut HashMap<(usize, usize), f32>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Result<(), Box<dyn Error>> {
-
-        if window_size <= 0 {
-            return Err(format!("window size {} is not valid", window_size).into());
-        }
+    fn count(window_size: usize, sequences: &Vec<Vec<String>>, tup2cooc: &mut HashMap<(usize, usize), f32>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Result<(), Box<dyn Error>> {
 
         // update x_mat for the co-occurences of a pivot token and context tokens in window
         // the contribution is relative to the distance, 1/d
+        let window_size = window_size as i32;
 
         let n = sequences.len();
         for (_k, sequence) in sequences.iter().enumerate() {
@@ -153,7 +149,7 @@ impl Counts {
     }
 
 
-    pub fn run_thread(window_size: i32, sequences: &Vec<Vec<String>>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Vec<u8> {
+    pub fn run_thread(window_size: usize, sequences: &Vec<Vec<String>>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Vec<u8> {
 
         println!("thread {}, working on vocab slice {:?}", thread_i, slice);
         let mut tup2cooc: HashMap<(usize, usize), f32> = HashMap::new();

@@ -50,6 +50,13 @@ impl DisplayProgress {
         }
     }
 
+    fn init_epoch_loss(&mut self) {
+        self.epoch_loss = 0.0;
+    }
+    fn init_total_loss(&mut self) {
+        self.total_loss = 0.0;
+    }
+
     fn set_n_slices(&mut self, n_slices: usize) {
         self.n_slices = n_slices
     }
@@ -239,6 +246,8 @@ impl Train {
         for _epoch in 0..train_params.max_iter {
 
             let my_time = Instant::now();
+            progress_params.init_epoch_loss();
+            progress_params.init_total_loss();
 
             // for each epoch - > shuffle the slices order and shuffle the order with each slice
             let mut slices_order = (0..progress_params.n_slices).into_iter().collect::<Vec<usize>>();
