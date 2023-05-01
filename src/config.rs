@@ -24,15 +24,16 @@ pub struct JsonTrain {
 
 impl Display for JsonTrain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "training hyper parameters:
-        vocab_size: {},
-        max_iter: {},
-        embedding_dim: {},
-        learning_rate: {},
-        x_max: {},
-        alpha: {},
-        batch_size: {},
-        num_threads_training: {}",
+        write!(f, 
+            "training hyper parameters:
+            vocab_size: {},
+            max_iter: {},
+            embedding_dim: {},
+            learning_rate: {},
+            x_max: {},
+            alpha: {},
+            batch_size: {},
+            num_threads_training: {}",
         self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.batch_size, self.num_threads_training
         )
     }
@@ -42,7 +43,7 @@ impl Display for JsonTrain {
 pub struct JsonTypes {
     pub corpus_file: String,
     pub output_dir: String,
-    pub window_size: i32,
+    pub window_size: usize,
     pub saved_counts: Option<bool>,
     pub num_threads_cooc: usize,
     pub json_train: JsonTrain
@@ -58,7 +59,7 @@ impl Display for JsonTypes {
         window_size: {}
         saved_counts: {:?}
         num_threads_cooc: {},
-        Using training hyper-params: {}",
+        {}",
         self.corpus_file, self.output_dir, self.window_size, self.saved_counts, self.num_threads_cooc, self.json_train)
     }
 }
@@ -83,60 +84,66 @@ impl Config {
         let f = fs::File::open(&args[1]).expect("cannot open json file");
         let json: Value = serde_json::from_reader(f).expect("cannot read json file");
 
+        let validate_str = |field: &str| {
+            json.get(field)
+            .expect(format!("{} was not supplied throught json", field).as_str())
+            .as_str()
+            .expect(format!("cannot cast {} to string", field).as_str())
+        };
+
+        let validate_bool = |field: &str, default_val: Option<bool>| {
+            match json.get(field) {
+                Some(field) => Some(field.as_bool().expect(format!("panic since given {} is not boolean", field).as_str())),
+                None => default_val
+            }
+        };
+
+        let validate_positive_integer = |field: &str, default_val: u64| {
+            let val = match json.get(field) {
+                Some(field) => {
+                    let val = field.as_u64().expect(format!("panic since given {} is not integer", field).as_str());
+                    assert!(val > 0, "{}", format!("panic since given {} is not positive integer", field));
+                    val
+                },
+                None => default_val
+            };
+            val
+        };
+
+        let validate_float = |field: &str, default_val: f64| {
+            let val = match json.get(field) {
+                Some(field) => {
+                    let val = field.as_f64().expect(format!("panic since given {} is not float", field).as_str());
+                    assert!(val > 0.0, "{}", format!("panic since given {} is not positive float", field));
+                    assert!(val <= 1.0, "{}", format!("panic since given {} is bigger than 1.0", field));
+                    val
+                },
+                None => default_val
+            };
+            val
+        };
+
         // validate input and output in json
-        let corpus_file = json.get("corpus_file").expect("corpus_file was not supplied throught json").as_str().expect("cannot cast input file to string");
-        let output_dir = json.get("output_dir").expect("output_dir was not supplied throught json").as_str().expect("cannot cast output path to string");
+        let corpus_file = validate_str("input_file");
+        let output_dir = validate_str("output_dir");
 
         // handle default vs input parameters
-        let vocab_size = match json.get("vocab_size") {
-            Some(vocab_size) => vocab_size.as_i64().expect("panic since given vocab_size is not numeric"),
-            None => 400000
-        };
-        let window_size = match json.get("window_size") {
-            Some(window_size) => window_size.as_i64().expect("panic since given window_size is not numeric"),
-            None => 10
-        };
-        let learning_rate = match json.get("learning_rate") {
-            Some(learning_rate) => learning_rate.as_f64().expect("panic since given learning_rate is not numeric"),
-            None => 0.05
-        };
-        let max_iter = match json.get("max_iter") {
-            Some(max_iter) => max_iter.as_i64().expect("panic since given max_iter is not numeric"),
-            None => 50
-        };
-        let embedding_dim = match json.get("embedding_dim") {
-            Some(embedding_dim) => embedding_dim.as_i64().expect("panic since given embedding_dim is not numeric"),
-            None => 300
-        };
-        let x_max = match json.get("x_max") {
-            Some(x_max) => x_max.as_f64().expect("panic since given x_max is not numeric"),
-            None => 100 as f64
-        };
-        let alpha = match json.get("alpha") {
-            Some(alpha) => alpha.as_f64().expect("panic since given alpha is not numeric"),
-            None => 0.75
-        };
-        let batch_size = match json.get("batch_size") {
-            Some(batch_size) => batch_size.as_i64().expect("panic since given batch_size is not numeric"),
-            None => 1
-        };
-        let saved_counts = match json.get("saved_counts") {
-            Some(saved_counts) => Some(saved_counts.as_bool().expect("panic since given saved_counts is not boolean")),
-            None => None
-        };
-        let num_threads_cooc = match json.get("num_threads_cooc") {
-            Some(num_threads_cooc) => num_threads_cooc.as_i64().expect("panic since given num_threads_cooc is not numeric"),
-            None => 4
-        };
-        let num_threads_training = match json.get("num_threads_training") {
-            Some(num_threads_training) => num_threads_training.as_i64().expect("panic since given num_threads_training is not numeric"),
-            None => 1
-        };
+        let vocab_size = validate_positive_integer("vocab_size", 400000);
+        let max_iter = validate_positive_integer("max_iter", 50);
+        let embedding_dim = validate_positive_integer("embedding_dim", 300);
+        let x_max = validate_positive_integer("x_max", 100);
+        let batch_size = validate_positive_integer("batch_size", 32);
+        let num_threads_cooc = validate_positive_integer("num_threads_cooc", 4);
+        let num_threads_training = validate_positive_integer("num_threads_training", 1);
+        let window_size = validate_positive_integer("window_size", 10);
+        let learning_rate = validate_float("learning_rate", 0.05);
+        let alpha = validate_float("alpha", 0.75);
+        let saved_counts = validate_bool("saved_counts", None);
 
         let params = JsonTypes {
             corpus_file: corpus_file.to_owned(),
             output_dir: output_dir.to_owned(),
-            window_size: window_size as i32,
+            window_size: window_size as usize,
             saved_counts: saved_counts,
             num_threads_cooc: num_threads_cooc as usize,
             json_train: JsonTrain { 
