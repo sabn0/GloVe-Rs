@@ -1,5 +1,5 @@
 
-use std::{error::Error, ops::{Range, AddAssign}, collections::HashMap};
+use std::{error::Error, ops::Range, collections::HashMap};
 use ndarray::{prelude::*, concatenate};
 use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
@@ -171,8 +171,8 @@ impl Similarity {
         // by input order should be 0 = -, 1 = +, 2 = +
         // put (-) of the first item
         let mut sum_analogy: Array1<f32> = -1.0 * self.extract_vec_from_word(inputs[0])?;
-        for i in 0..inputs.len() { // add the next to inputs
-            sum_analogy.add_assign(&self.extract_vec_from_word(inputs[i])?);
+        for i in 1..inputs.len() { // add 1 and 2 to sum
+            sum_analogy += &self.extract_vec_from_word(inputs[i])?;
         }
         Ok(sum_analogy)
     }
