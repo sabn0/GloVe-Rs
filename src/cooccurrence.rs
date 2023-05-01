@@ -60,34 +60,30 @@ impl Counts {
 
     fn build_vocab(token2count: HashMap<String, usize>, vocab_size: usize, t2i: &mut HashMap<String, usize>) {
         
-        //
-        let mut known_words = 0;
-
         // get most frequenct tokens after sorting
-        let keys: Vec<&String> = token2count.keys().collect();
-        let values: Vec<&usize> = token2count.values().collect();
-        let mut tup: Vec<(String, &usize)> = std::iter::zip(keys, values)
-        .map(|(a, b)| (a.to_owned(), b))
-        .collect();
-        
+        let mut tup = token2count
+        .iter()
+        .map(|(k,v)| (k.to_owned(), v))
+        .collect::<Vec<(String, &usize)>>();
         tup.sort_by_key(|k| k.1);
         tup.reverse();
         tup.truncate(vocab_size);
         tup.shuffle(&mut thread_rng());
 
-        for i in 0..vocab_size {
-
-            let tok = &tup[i].0;
-            t2i.entry(tok.to_owned()).or_insert(known_words);
-            known_words += 1;
-        }
+        // populate t2i with the most frequent tokens
+        (0..vocab_size).into_iter().for_each(|i| { t2i.entry((&tup[i].0).to_owned()).or_insert(i);});
 
         println!("using {} most common tokens out of {}", vocab_size, token2count.len());
 
     }
 
 
-    fn count(window_size: usize, sequences: &Vec<Vec<String>>, tup2cooc: &mut HashMap<(usize, usize), f32>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Result<(), Box<dyn Error>> {
+    fn count(window_size: usize, 
+        sequences: &Vec<Vec<String>>, 
+        tup2cooc: &mut HashMap<(usize, usize), f32>, 
+        t2i: &HashMap<String, usize>, 
+        slice: &Range<usize>, 
+        thread_i: usize) -> Result<(), Box<dyn Error>> {
 
         // update x_mat for the co-occurences of a pivot token and context tokens in window
         // the contribution is relative to the distance, 1/d
