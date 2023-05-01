@@ -180,8 +180,8 @@ impl Counts {
 
         // extract params, safe to unwrap
         let input_file = params.corpus_file.as_ref();
-        let mut vocab_size = params.vocab_size as usize;
-        let window_size = params.window_size as i32;
+        let mut vocab_size = params.json_train.vocab_size;
+        let window_size = params.window_size;
 
         let mut sequences = Vec::new();
         let token2count = Counts::load(input_file, &mut sequences)?;
@@ -201,8 +201,11 @@ impl Counts {
         // this should be done in threads...
         let in_parts_size: usize = 30000;
         let total: usize = t2i.len();
-        let slices: Vec<Range<usize>> = (0..total).step_by(in_parts_size).map(|i| i..i+in_parts_size).collect();
-        ThreadPoolBuilder::new().num_threads(params.num_threads as usize).build_global()?;
+        let slices: Vec<Range<usize>> = (0..total)
+        .step_by(in_parts_size)
+        .map(|i| i..i+in_parts_size)
+        .collect();
+        ThreadPoolBuilder::new().num_threads(params.num_threads_cooc).build_global()?;
         println!("total number of tokens considered: {}", total);
 
         // collecting the slices counts in serialized format into one vector

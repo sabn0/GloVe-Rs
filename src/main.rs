@@ -4,7 +4,6 @@ mod config;
 mod similarity;
 mod run;
 
-// github link
 // comments
 // tests
 // wiki data
@@ -12,7 +11,8 @@ mod run;
 // check results
 // add option for threads during training
 // handle cases of "chunks" in data for counting
-
+// includes
+// config default arguments check
 
 fn main() {
     run::Run::run();

@@ -9,36 +9,57 @@ use std::io::prelude::*;
 use flate2::{Compression, read::{GzDecoder}};
 use flate2::write::GzEncoder;
 
+#[derive(Clone, Debug)]
+pub struct JsonTrain {
+    pub vocab_size: usize,
+    pub max_iter: usize,
+    pub embedding_dim: usize,
+    pub learning_rate: f32,
+    pub x_max: f32,
+    pub alpha: f32,
+    pub batch_size: usize,
+    pub num_threads_training: usize
+}
+
+
+impl Display for JsonTrain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "training hyper parameters:
+        vocab_size: {},
+        max_iter: {},
+        embedding_dim: {},
+        learning_rate: {},
+        x_max: {},
+        alpha: {},
+        batch_size: {},
+        num_threads_training: {}",
+        self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.batch_size, self.num_threads_training
+        )
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct JsonTypes {
     pub corpus_file: String,
     pub output_dir: String,
-    pub vocab_size: i64,
-    pub window_size: i64,
-    pub max_iter: i64,
-    pub embedding_dim: i64,
-    pub learning_rate: f64,
-    pub x_max: f64,
-    pub alpha: f64,
-    pub batch_size: i64,
+    pub window_size: i32,
     pub saved_counts: Option<bool>,
-    pub num_threads: i64
+    pub num_threads_cooc: usize,
+    pub json_train: JsonTrain
 }
+
+
 
 impl Display for JsonTypes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "using hyper-params:
-        max vocab_size: {}
+        corpus_file: {}
+        output_dir: {}
         window_size: {}
-        max_iter: {}
-        embedding_dim: {}
-        init learning_rate: {}
-        x_max: {}
-        alpha: {}
-        batch_size: {}
-        num_threads: {}",
-        self.vocab_size, self.window_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.batch_size, self.num_threads)
+        saved_counts: {:?}
+        num_threads_cooc: {},
+        Using training hyper-params: {}",
+        self.corpus_file, self.output_dir, self.window_size, self.saved_counts, self.num_threads_cooc, self.json_train)
     }
 }
 
@@ -103,24 +124,31 @@ impl Config {
             Some(saved_counts) => Some(saved_counts.as_bool().expect("panic since given saved_counts is not boolean")),
             None => None
         };
-        let num_threads = match json.get("num_threads") {
-            Some(num_threads) => num_threads.as_i64().expect("panic since given num_threads is not numeric"),
+        let num_threads_cooc = match json.get("num_threads_cooc") {
+            Some(num_threads_cooc) => num_threads_cooc.as_i64().expect("panic since given num_threads_cooc is not numeric"),
             None => 4
+        };
+        let num_threads_training = match json.get("num_threads_training") {
+            Some(num_threads_training) => num_threads_training.as_i64().expect("panic since given num_threads_training is not numeric"),
+            None => 1
         };
 
         let params = JsonTypes {
             corpus_file: corpus_file.to_owned(),
             output_dir: output_dir.to_owned(),
-            vocab_size: vocab_size,
-            window_size: window_size,
-            learning_rate: learning_rate,
-            max_iter: max_iter,
-            embedding_dim: embedding_dim,
-            x_max: x_max,
-            alpha: alpha,
-            batch_size: batch_size,
+            window_size: window_size as i32,
             saved_counts: saved_counts,
-            num_threads: num_threads
+            num_threads_cooc: num_threads_cooc as usize,
+            json_train: JsonTrain { 
+                vocab_size: vocab_size as usize, 
+                max_iter: max_iter as usize, 
+                embedding_dim: embedding_dim as usize, 
+                learning_rate: learning_rate as f32, 
+                x_max: x_max as f32, 
+                alpha: alpha as f32, 
+                batch_size: batch_size as usize, 
+                num_threads_training: num_threads_training as usize 
+            }
         };
 
         Ok (

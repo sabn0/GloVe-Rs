@@ -56,7 +56,7 @@ impl Run {
         };
 
         println!("loaded {} chunks of cooc", &slices.len());
-        let trainer = match train::Train::run(slices, &params) {
+        let trainer = match train::Train::run(slices, &params.json_train) {
             Ok(trainer) => trainer,
             Err(e) => panic!("{}", e)
         };
