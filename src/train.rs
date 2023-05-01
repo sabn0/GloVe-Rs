@@ -14,7 +14,7 @@ use std::ops::AddAssign;
 use std::ops::SubAssign;
 use std::slice::Chunks;
 use std::time::Instant;
-use super::config::JsonTrain;
+use super::config::{self, JsonTrain};
 
 pub struct Train {
     w_tokens: Array2<f32>,
@@ -25,50 +25,6 @@ pub struct Train {
     ag_w_context: Array2<f32>,
     ag_b_tok: Array2<f32>,
     ag_b_context: Array2<f32>,
-}
-
-struct DisplayProgress {
-    epoch_loss: f32, // counting the avg loss of a batch
-    total_loss: f32, // counting the number of batchs
-    n_slices: usize,        // the number of slices x_mat is divided to
-    slice_enumeration: usize, // enumerator over n_slices
-    current_slice: usize,   // the value (index) of the current slice
-    total_examples: Vec<usize>,  // number of training examples per slice
-}
-
-impl DisplayProgress {
-
-    fn new() -> Self {
-        Self {
-            epoch_loss: 0.0,
-            total_loss: 0.0,
-            n_slices: 0,
-            slice_enumeration: 0,
-            current_slice: 0,
-            total_examples: Vec::new()
-        }
-    }
-
-    fn init_epoch_loss(&mut self) {
-        self.epoch_loss = 0.0;
-    }
-    fn init_total_loss(&mut self) {
-        self.total_loss = 0.0;
-    }
-
-    fn set_n_slices(&mut self, n_slices: usize) {
-        self.n_slices = n_slices
-    }
-    fn set_slice_enumeration(&mut self, slice_enumeration: usize) {
-        self.slice_enumeration = slice_enumeration
-    }
-    fn set_current_slice(&mut self, current_slice: usize) {
-        self.current_slice = current_slice
-    }
-    fn set_total_examples(&mut self, total_examples: Vec<usize>) {
-        self.total_examples = total_examples
-    }
-
 }
 
 impl Train {
@@ -87,11 +43,11 @@ impl Train {
         }
     }
 
-    pub fn get_w_tokens(&self) -> Array2<f32> {
+    fn get_w_tokens(&self) -> Array2<f32> {
         return self.w_tokens.clone();
     }
 
-    pub fn get_w_context(&self) -> Array2<f32> {
+    fn get_w_context(&self) -> Array2<f32> {
         return self.w_context.clone();
     }
 
@@ -274,7 +230,7 @@ impl Train {
 
     }
 
-    pub fn run (x_mat_slices: Vec<Array2<f32>>, train_params: &JsonTrain) -> Result<Train, Box<dyn Error>> {
+    pub fn run (x_mat_slices: Vec<Array2<f32>>, train_params: &JsonTrain, output_dir: &str) -> Result<(), Box<dyn Error>> {
                 
         // calculate vocab_size from slices
         let vocab_size = 1 + (&x_mat_slices).iter().map(|x_mat_slice| {
@@ -306,8 +262,60 @@ impl Train {
 
         let mut trainer = Train::new(vocab_size, train_params.embedding_dim);
         trainer.train(x_mat_symmetric_slices, train_params)?;
-        Ok(trainer)
+
+        // w the matrix to sample from and compute similarities..
+        let w: Array2<f32> = trainer.get_w_tokens() + trainer.get_w_context();
+
+        // save the weights
+        config::files_handling::save_output::<Array2<f32>>(output_dir, "vecs", w)?; 
+
+        Ok(())
+
     }
 
+
+}
+
+struct DisplayProgress {
+    epoch_loss: f32, // counting the avg loss of a batch
+    total_loss: f32, // counting the number of batchs
+    n_slices: usize,        // the number of slices x_mat is divided to
+    slice_enumeration: usize, // enumerator over n_slices
+    current_slice: usize,   // the value (index) of the current slice
+    total_examples: Vec<usize>,  // number of training examples per slice
+}
+
+impl DisplayProgress {
+
+    fn new() -> Self {
+        Self {
+            epoch_loss: 0.0,
+            total_loss: 0.0,
+            n_slices: 0,
+            slice_enumeration: 0,
+            current_slice: 0,
+            total_examples: Vec::new()
+        }
+    }
+
+    fn init_epoch_loss(&mut self) {
+        self.epoch_loss = 0.0;
+    }
+    fn init_total_loss(&mut self) {
+        self.total_loss = 0.0;
+    }
+
+    fn set_n_slices(&mut self, n_slices: usize) {
+        self.n_slices = n_slices
+    }
+    fn set_slice_enumeration(&mut self, slice_enumeration: usize) {
+        self.slice_enumeration = slice_enumeration
+    }
+    fn set_current_slice(&mut self, current_slice: usize) {
+        self.current_slice = current_slice
+    }
+    fn set_total_examples(&mut self, total_examples: Vec<usize>) {
+        self.total_examples = total_examples
+    }
 
 }

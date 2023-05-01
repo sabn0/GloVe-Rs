@@ -5,7 +5,7 @@ use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
 use plotters::{prelude::*, style::text_anchor::*};
 
-#[allow(dead_code)]
+//#[allow(dead_code)]
 pub struct Similarity {
     w: Array2<f32>,
     t2i: HashMap<String, usize>,
@@ -117,7 +117,7 @@ impl Similarity {
 
     }
 
-    pub fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
+    fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
 
         assert_eq!(self.w.dim().0, self.t2i.len(), "inconsistent number of entries in w and tokens");
         assert!(k > 0, "k most be positive");
@@ -140,7 +140,7 @@ impl Similarity {
 
     }
 
-    pub fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
+    fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
 
         // w is of shape (k, embedding_dim), should return a slice (k, 2) with the max and mean values
         let (k, _) = &w.dim();

@@ -18,31 +18,30 @@ impl Run {
 
         println!("entering program...");
         let args: Vec<String> = env::args().collect();
-        //let args = vec!["".to_string(), "args_expans.json".to_string()];
 
         println!("building parameters...");
         let params = match config::Config::new(&args) {
-            Ok(config) => config.get_params(), // safe to unwrap from here now
+            Ok(config) => config.get_params(),
             Err(e) => panic!("{}", e)
         };
 
         // run the co-occurences count stage if not saved already
         if params.saved_counts.is_none() || params.saved_counts.unwrap() == false {
 
+            let timer = Instant::now();
             println!("{}", params);
             println!("starting vocab building...");
-            let my_time = Instant::now();
     
             if let Err(e) = cooccurrence::Counts::run(&params) {
                 panic!("{}", e)
             }
             
-            println!("finished vocab creation, took {} seconds ...", my_time.elapsed().as_secs());
+            println!("finished creation and saved vocab, took {} seconds ...", timer.elapsed().as_secs());
 
         }
 
         // run training part
-        let my_time = Instant::now();
+        let timer = Instant::now();
         println!("starting training part...");
 
         // the co-ocurences were saved in parts or given as input, load them
@@ -56,21 +55,13 @@ impl Run {
             Err(e) => panic!("{}", e)
         };
 
+        // train (and save trained weights) 
         println!("loaded {} chunks of cooc", &slices.len());
-        let trainer = match train::Train::run(slices, &params.json_train) {
-            Ok(trainer) => trainer,
-            Err(e) => panic!("{}", e)
+        if let Err(e) = train::Train::run(slices, &params.json_train, &params.output_dir) {
+            panic!("{}", e)
         };
 
-        let w_tokens = trainer.get_w_tokens();
-        let w_context = trainer.get_w_context();
-        let w = w_tokens + w_context;
-        // this should be the matrix to sample from and compute similarities..
-
-        // save the weights
-        if let Err(e) = config::files_handling::save_output::<Array2<f32>>(&params.output_dir, "vecs", w) { panic!("{}", e) }
-
-        println!("finished training, took {} seconds ...", my_time.elapsed().as_secs());
+        println!("finished training, saved vecs. Took {} seconds ...", timer.elapsed().as_secs());
     
     }
 

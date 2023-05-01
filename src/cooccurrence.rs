@@ -137,7 +137,7 @@ impl Counts {
     }
 
 
-    pub fn map_to_ndarray(tup2cooc: &HashMap<(usize, usize), f32>, nd_array: &mut Array2<f32>) {
+    fn map_to_ndarray(tup2cooc: &HashMap<(usize, usize), f32>, nd_array: &mut Array2<f32>) {
 
         for (i, (k, v)) in tup2cooc.iter().enumerate() {
             let line: Array1<f32> = array![k.0 as f32, k.1 as f32, *v];
@@ -146,7 +146,7 @@ impl Counts {
     }
 
 
-    pub fn run_thread(window_size: usize, sequences: &Vec<Vec<String>>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Vec<u8> {
+    fn run_thread(window_size: usize, sequences: &Vec<Vec<String>>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Vec<u8> {
 
         println!("thread {}, working on vocab slice {:?}", thread_i, slice);
         let mut tup2cooc: HashMap<(usize, usize), f32> = HashMap::new();
