@@ -1,0 +1,11 @@
+{
+	"corpus_file": "Input/wiki103-tok100M.txt",
+	"output_dir": "Output",
+	"max_iter": 3,
+	"embedding_dim": 300,
+	"window_size": 10,
+	"batch_size": 32,
+	"vocab_size": 400000,
+	"num_threads": 4
+}
+
