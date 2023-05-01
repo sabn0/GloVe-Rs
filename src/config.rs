@@ -49,8 +49,6 @@ pub struct JsonTypes {
     pub json_train: JsonTrain
 }
 
-
-
 impl Display for JsonTypes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "using hyper-params:
@@ -272,10 +270,10 @@ impl ReadFile for Vec<Vec<u8>> {
         //
 
         let mut items: Vec<Vec<u8>> = Vec::new();
-        let (main_dir, _) = file_path.rsplit_once("/").unwrap();
-        let paths = fs::read_dir(main_dir).unwrap();
+        let (main_dir, _) = file_path.rsplit_once("/").ok_or("invalid path file")?;
+        let paths = fs::read_dir(main_dir)?;
         for path in paths {
-            let file_path = path.unwrap().path().display().to_string();
+            let file_path = path?.path().display().to_string();
             if file_path.ends_with(".gz") {
                 let f = BufReader::new(File::open(file_path)?);
                 let mut reader = GzDecoder::new(f);

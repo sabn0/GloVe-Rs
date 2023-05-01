@@ -150,7 +150,7 @@ impl Train {
                     .select(Axis(0), chunk_indexes)
                     .slice(s![.., col])
                     .to_shape(this_batch)
-                    .unwrap()
+                    .expect("slice shape doesn't fit to specified batch size")
                     .to_vec()
                     .iter()
                     .map(|x| *x as usize)
@@ -191,7 +191,7 @@ impl Train {
                 // need to be careful with sum here, it can reach total_examples.sum() / batch size
                 // so basically the batch size needs to be larger than n_slices to avoid a worst case collapse
                 let local_batch_loss: Array2<f32> = 0.5 * &xs_weighted * &diff.mapv(|x| x.powi(2));
-                let local_loss = local_batch_loss.mean().unwrap();
+                let local_loss = local_batch_loss.mean().ok_or("problem in loss calculation")?;
                 *epoch_loss += local_loss;
                 *total_loss += 1.0;
 
@@ -259,7 +259,8 @@ impl Train {
 
                 progress_params.set_slice_enumeration(rr+1);
                 progress_params.set_current_slice(*m);
-                let slice_arr = x_mat.get(*m).unwrap(); // shape (N, 3)                
+                let slice_arr = x_mat.get(*m)
+                .expect(format!("did not find slice {} in vec", *m).as_str()); // shape (N, 3)                
 
                 if let Err(e) = self.do_training_slice(slice_arr, train_params, &mut progress_params) {
                     panic!("{}", e);
@@ -278,8 +279,8 @@ impl Train {
                 
         // calculate vocab_size from slices
         let vocab_size = 1 + (&x_mat_slices).iter().map(|x_mat_slice| {
-            *x_mat_slice.slice(s![.., ..2usize]).max().unwrap() as usize
-        }).max().unwrap();
+            *x_mat_slice.slice(s![.., ..2usize]).max().expect("did not find max value in slice") as usize
+        }).max().ok_or("did not find max value in all slices")?;
 
         // rebuild symmetric part of slices
         // move from the old vector...

@@ -21,7 +21,7 @@ impl Run {
 
         println!("building parameters...");
         let params = match config::Config::new(&args) {
-            Ok(config) => config.get_params(), // safe to unwrap now
+            Ok(config) => config.get_params(), // safe to unwrap from here now
             Err(e) => panic!("{}", e)
         };
 

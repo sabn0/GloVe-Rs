@@ -1,5 +1,5 @@
 
-use std::{error::Error, ops::Range, collections::HashMap};
+use std::{error::Error, ops::{Range, AddAssign}, collections::HashMap};
 use ndarray::{prelude::*, concatenate};
 // use ndarray_linalg::{Eigh, UPLO};
 use ndarray_stats::*;
@@ -25,8 +25,8 @@ impl Similarity {
             let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
             row.mapv_inplace(|a| (a / norm).abs());
         }
-        assert!(*w.max().unwrap() <= 1.0);
-        assert!(*w.min().unwrap() >= 0.0);
+        assert!(*w.max().expect("w is not between 0 and 1 after l2 norm") <= 1.0);
+        assert!(*w.min().expect("w is not between 0 and 1 after l2 norm") >= 0.0);
 
         // get the reverse map of t2i
         let mut i2t: HashMap<usize, String> = HashMap::new();
@@ -51,7 +51,9 @@ impl Similarity {
 
         let (tokens, sliced_w) = match use_tokens {
             Some(use_tokens) => {
-                let indices = use_tokens.iter().map(|t| self.t2i.get(t).unwrap().to_owned()).collect::<Vec<usize>>();
+                let indices = use_tokens.iter().map(|t| self.t2i.get(t)
+                .expect(format!("requested token {} not in vocabulary", t).as_str()).to_owned())
+                .collect::<Vec<usize>>();
                 self.slice_weights(k, Some(indices))?
             },
             None => {
@@ -104,7 +106,7 @@ impl Similarity {
         };
 
         for i in 0..tokens.len() {
-            let token = tokens.get(i).unwrap().to_string();
+            let token = tokens.get(i).unwrap().to_string(); // safe, tokens is the enumerator
             // positions should be of shape (2,), from (k, 2)
             let positions: Array1<f32> = projections.slice(s![i, ..]).to_owned();
             assert_eq!(positions.dim(), 2);
@@ -128,7 +130,11 @@ impl Similarity {
         
         // slice w and tokens ( maintain order ?)
         let sliced_w: Array2<f32> = self.w.select(Axis(0), &indices);
-        let tokens: Vec<String> = indices.iter().map(|i| self.i2t.get(i).unwrap().to_string()).collect();
+        let tokens: Vec<String> = indices.iter().map(|i| {
+            self.i2t.get(i)
+            .expect(format!("did not find token that matches index {}", i).as_str())
+            .to_string()
+        }).collect();
 
         assert_eq!(tokens.len(), sliced_w.dim().0);
         return Ok((tokens, sliced_w))
@@ -144,8 +150,9 @@ impl Similarity {
         let means: Array2<f32> = w.mean_axis(Axis(1)).ok_or("problem in mean")?.to_shape((*k, 1usize))?.to_owned();
         let maxs: Array2<f32> = w.map_axis(Axis(1), |v| { 
             *v.iter()
-            .max_by(|x, y| x.partial_cmp(y).ok_or("problem in partial_cmp").unwrap())
-            .ok_or("problem in max").unwrap()
+            .max_by(|x, y| x.partial_cmp(y)
+            .expect("problem in get_2dim_projections"))
+            .expect("problem in get_2dim_projections")
         }).to_shape((*k, 1usize))?.to_owned();
 
         // get min and max values for axes
@@ -162,14 +169,13 @@ impl Similarity {
 
     pub fn extract_analogy_vec(&self, inputs: [&str; 3]) -> Result<Array1<f32>, Box<dyn Error>> {
 
-        let mut vecs: Vec<Array1<f32>> = Vec::new();
-        for e in inputs {
-            let vec = self.extract_vec_from_word(e)?; 
-            vecs.push(vec);
+        // by input order should be 0 = -, 1 = +, 2 = +
+        // put (-) of the first item
+        let mut sum_analogy: Array1<f32> = -1.0 * self.extract_vec_from_word(inputs[0])?;
+        for i in 0..inputs.len() { // add the next to inputs
+            sum_analogy.add_assign(&self.extract_vec_from_word(inputs[i])?);
         }
-
-        let analogy = vecs.get(1).unwrap() - vecs.get(0).unwrap() + vecs.get(2).unwrap();
-        Ok(analogy)
+        Ok(sum_analogy)
     }
 
     pub fn extract_analogies(&self, inputs: [&str; 3], k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
@@ -190,9 +196,11 @@ impl Similarity {
 
     pub fn find_k_most_similar(&self, vec: &Array1<f32>, k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
 
+        assert!(k < self.w.dim().0, "k most be smaller than the vocabulary, but {} given", k);
+
         // multiply all vectors by token vector
         let mut sim_tokens: Vec<(String, f32)> = Vec::new();
-        let scores = self.w.dot(vec); // of size w.0, vocab size
+        let scores = self.w.dot(vec); // of size w.0 <=> vocab size
         let mut indexed_scores: Vec<(usize, f32)> = scores.iter().map(|x| x.to_owned()).enumerate().collect();
 
         // sort by most similar in descending order
@@ -200,8 +208,8 @@ impl Similarity {
 
         // get k most similar tokens
         for i in 0..k {
-            let (index, score) = indexed_scores.get(i).unwrap();
-            let sim_tok = self.i2t.get(index).unwrap().to_string(); // safe to unwrap
+            let (index, score) = indexed_scores.get(i).unwrap(); // safe, indexed_scores of dim k
+            let sim_tok = self.i2t.get(index).unwrap().to_string(); // safe, i2t of dim > k
             sim_tokens.push((sim_tok, *score));
         }
 
@@ -224,12 +232,26 @@ mod tests {
     const WEIGHTS_PATH: &str = "Output/vecs";
     const TOKENS_PATH: &str = "Output/words";
 
+    fn read_weights() -> Array2<f32> {
+        match config::read_input::<Array2<f32>>(WEIGHTS_PATH) {
+            Ok(w) => w,
+            Err(e) => panic!("{}", e)
+        }
+    }
+
+    fn read_t2i() -> HashMap<String, usize> {
+        match config::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
+            Ok(t2i) => t2i,
+            Err(e) => panic!("{}", e)
+        }
+    }
+
     #[test]
     fn analogies_test() {
 
         // read weights and tokens
-        let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
-        let mut w = config::read_input::<Array2<f32>>(WEIGHTS_PATH).unwrap();
+        let mut w = read_weights();
+        let t2i = read_t2i();
 
         // run similarity test
         let sim_obj = Similarity::new(&mut w, t2i);
@@ -257,15 +279,26 @@ mod tests {
             
             let source = [input[0], input[1], input[2]];
             let target = input[3];
-            let analogies = sim_obj.extract_analogies(source, k).unwrap();
+            let analogies = match sim_obj.extract_analogies(source, k) {
+                Ok(analogies) => analogies,
+                Err(e) => panic!("{}", e)
+            };
             for (i, (analogy, score)) in analogies.iter().enumerate() {
-                println!("{} : {} - {} + {} ? {} = {}", i, input[1], input[0], input[2], analogy, score);    
+                println!("{} : {} - {} + {} ? {} = {}", i, input[1], input[0], input[2], analogy, score);
             }
 
-            let target_vec = sim_obj.extract_vec_from_word(target).unwrap();
-            let analogy_vec = sim_obj.extract_analogy_vec(source).unwrap();
-            let target_score = target_vec.dot(&analogy_vec);
-            println!("{} = {}", target, target_score);
+            println!("re-computation of the target, might have been found already...");
+            let analogy_vec = sim_obj.extract_analogy_vec(source).unwrap(); // safe, it was computed already before
+            match sim_obj.extract_vec_from_word(target) {
+                Ok(target_vec) => {
+                    let target_score = target_vec.dot(&analogy_vec);
+                    println!("{} = {}", target, target_score);
+                },
+                Err(_e) => {
+                    println!("supposed target {} is not in the vocabulray", target);
+                }
+            };
+
 
         }
 
@@ -276,8 +309,8 @@ mod tests {
     fn find_most_similar_test() {
 
         // read weights and tokens
-        let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
-        let mut w = config::read_input::<Array2<f32>>(WEIGHTS_PATH).unwrap();
+        let mut w = read_weights();
+        let t2i = read_t2i();
 
         // run similarity test
         let sim_obj = Similarity::new(&mut w, t2i);
@@ -287,7 +320,10 @@ mod tests {
         for token in tokens {
 
             println!("searching {} most similar words to {}", k, token);
-            let vec = sim_obj.extract_vec_from_word(token).unwrap();
+            let vec = match sim_obj.extract_vec_from_word(token) {
+                Ok(vec) => vec,
+                Err(e) => panic!("{}", e)
+            };
 
             match sim_obj.find_k_most_similar(&vec, k) {
                 Ok(analogies) => {
@@ -304,8 +340,8 @@ mod tests {
     fn plot_tokens_rand() {
 
         // read weights and tokens
-        let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
-        let mut w = config::read_input::<Array2<f32>>(WEIGHTS_PATH).unwrap();
+        let mut w = read_weights();
+        let t2i = read_t2i();
 
         // create output folder
         let output_dir = "Img";
@@ -323,8 +359,8 @@ mod tests {
     fn plot_tokens_manual() {
 
         // read weights and tokens
-        let t2i = config::read_input::<HashMap<String, usize>>(TOKENS_PATH).unwrap();
-        let mut w = config::read_input::<Array2<f32>>(WEIGHTS_PATH).unwrap();
+        let mut w = read_weights();
+        let t2i = read_t2i();
 
         // create output folder
         let output_dir = "Img";
