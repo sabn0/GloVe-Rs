@@ -1,5 +1,5 @@
 mod train;
-mod cooccurence;
+mod cooccurrence;
 mod config;
 mod similarity;
 mod run;
@@ -7,11 +7,8 @@ mod run;
 // comments
 // tests
 // wiki data lisence
-// plotters -> avg value and max value                  => done
-// check results                                        => done
 // includes and erase redundant code, pub vs pri
 // uninstall what not used, organize toml
-// config default arguments check                       => done
 // option to result when possible
 // existence of keys and values hash
 

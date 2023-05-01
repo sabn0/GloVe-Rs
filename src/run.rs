@@ -2,7 +2,7 @@
 
 use ndarray::Array2;
 use super::config;
-use super::cooccurence;
+use super::cooccurrence;
 use super::train;
 use core::panic;
 use std::env;
@@ -32,7 +32,7 @@ impl Run {
             println!("starting vocab building...");
             let my_time = Instant::now();
     
-            if let Err(e) = cooccurence::Counts::run(&params) {
+            if let Err(e) = cooccurrence::Counts::run(&params) {
                 panic!("{}", e)
             }
             
