@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
 use std::ops::Range;
+use std::error::Error;
 use ndarray::{Array2, Array1, array, s};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use std::error::Error;
 use rayon::{prelude::*, ThreadPoolBuilder};
-use crate::config::{JsonTypes, self};
+use bincode::serialize;
+use super::config::{JsonTypes, self};
 
 pub struct Counts {}
 
@@ -158,7 +159,7 @@ impl Counts {
 
         let mut save_item: Array2<f32> = Array2::from_elem((tup2cooc.len(), 3), 0.0);
         Counts::map_to_ndarray(&tup2cooc, &mut save_item);
-        let save_item = bincode::serialize(&save_item).expect("could not serialize nd array");
+        let save_item = serialize(&save_item).expect("could not serialize nd array");
 
         println!("finished thread {}, vocab slice {:?}", thread_i, slice);
         save_item
@@ -206,11 +207,11 @@ impl Counts {
         }).collect();
 
         // save the counts to one zip, should be cheaper
-        config::save_output::<Vec<Vec<u8>>>(&params.output_dir, "cooc", counts_by_slices)?;
+        config::files_handling::save_output::<Vec<Vec<u8>>>(&params.output_dir, "cooc", counts_by_slices)?;
         println!("saved as zip files");
 
         // save the tokens
-        config::save_output::<HashMap<String, usize>>(&params.output_dir, "words", t2i.clone())?;
+        config::files_handling::save_output::<HashMap<String, usize>>(&params.output_dir, "words", t2i.clone())?;
         
         Ok(())
 

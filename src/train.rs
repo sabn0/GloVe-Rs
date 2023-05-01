@@ -8,14 +8,13 @@ use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::rand::seq::SliceRandom;
 use ndarray_stats::QuantileExt;
 use rand::thread_rng;
-use crate::config::JsonTrain;
 use std::error::Error;
 use std::iter::zip;
 use std::ops::AddAssign;
 use std::ops::SubAssign;
 use std::slice::Chunks;
 use std::time::Instant;
-
+use super::config::JsonTrain;
 
 pub struct Train {
     w_tokens: Array2<f32>,

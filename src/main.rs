@@ -1,3 +1,4 @@
+
 mod train;
 mod cooccurrence;
 mod config;
@@ -5,12 +6,10 @@ mod similarity;
 mod run;
 
 // comments
-// tests
-// wiki data lisence
+// add tests
+// wiki data lisence and packages lisence
 // includes and erase redundant code, pub vs pri
-// uninstall what not used, organize toml
-// option to result when possible
-// existence of keys and values hash
+// re-run when done
 
 fn main() {
     run::Run::run();

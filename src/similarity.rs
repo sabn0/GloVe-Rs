@@ -1,7 +1,6 @@
 
 use std::{error::Error, ops::{Range, AddAssign}, collections::HashMap};
 use ndarray::{prelude::*, concatenate};
-// use ndarray_linalg::{Eigh, UPLO};
 use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
 use plotters::{prelude::*, style::text_anchor::*};
@@ -224,23 +223,22 @@ mod tests {
 
     use std::collections::HashMap;
     use std::fs;
-
-    use crate::similarity::Similarity;
     use ndarray::Array2;
     use crate::config;
-
+    use crate::similarity::Similarity;
+    
     const WEIGHTS_PATH: &str = "Output/vecs";
     const TOKENS_PATH: &str = "Output/words";
 
     fn read_weights() -> Array2<f32> {
-        match config::read_input::<Array2<f32>>(WEIGHTS_PATH) {
+        match config::files_handling::read_input::<Array2<f32>>(WEIGHTS_PATH) {
             Ok(w) => w,
             Err(e) => panic!("{}", e)
         }
     }
 
     fn read_t2i() -> HashMap<String, usize> {
-        match config::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
+        match config::files_handling::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
             Ok(t2i) => t2i,
             Err(e) => panic!("{}", e)
         }

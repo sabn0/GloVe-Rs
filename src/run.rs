@@ -1,13 +1,14 @@
 
 
-use ndarray::Array2;
+
 use super::config;
 use super::cooccurrence;
 use super::train;
 use core::panic;
 use std::env;
 use std::time::Instant;
-
+use ndarray::Array2;
+use bincode::deserialize;
 
 pub struct Run {}
 
@@ -46,10 +47,10 @@ impl Run {
 
         // the co-ocurences were saved in parts or given as input, load them
         let cooc_path = (&params.output_dir).to_string() + "/cooc";
-        let slices: Vec<Array2<f32>> = match config::read_input::<Vec<Vec<u8>>>(&cooc_path) {
+        let slices: Vec<Array2<f32>> = match config::files_handling::read_input::<Vec<Vec<u8>>>(&cooc_path) {
             Ok(slices) => {
                 slices.iter().map(|slice| {
-                    bincode::deserialize(slice).expect("could not deserialize to nd array")
+                    deserialize(slice).expect("could not deserialize to nd array")
                 }).collect::<Vec<Array2<f32>>>()
             },
             Err(e) => panic!("{}", e)
@@ -67,7 +68,7 @@ impl Run {
         // this should be the matrix to sample from and compute similarities..
 
         // save the weights
-        if let Err(e) = config::save_output::<Array2<f32>>(&params.output_dir, "vecs", w) { panic!("{}", e) }
+        if let Err(e) = config::files_handling::save_output::<Array2<f32>>(&params.output_dir, "vecs", w) { panic!("{}", e) }
 
         println!("finished training, took {} seconds ...", my_time.elapsed().as_secs());
     
