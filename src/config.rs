@@ -72,15 +72,14 @@ impl Config {
         return self.params.clone()
     }
 
-    pub fn new(args: &[String]) -> Result<Config, Box<dyn Error>> { 
-
-        if args.len() != 2 {
-            return Err(format!("input should be a path to json file only").into());
-        }
-
+    fn read_json(json_path: &String) -> Value {
         // parse input json
-        let f = fs::File::open(&args[1]).expect("cannot open json file");
+        let f = fs::File::open(json_path).expect("cannot open json file");
         let json: Value = serde_json::from_reader(f).expect("cannot read json file");
+        json
+    }
+
+    fn validate(json: Value) -> Result<JsonTypes, Box<dyn Error>> {
 
         let validate_str = |field: &str| {
             json.get(field)
@@ -91,16 +90,16 @@ impl Config {
 
         let validate_bool = |field: &str, default_val: Option<bool>| {
             match json.get(field) {
-                Some(field) => Some(field.as_bool().expect(format!("panic since given {} is not boolean", field).as_str())),
+                Some(val) => Some(val.as_bool().expect(format!("panic since given {} is not boolean", field).as_str())),
                 None => default_val
             }
         };
 
         let validate_positive_integer = |field: &str, default_val: u64| {
             let val = match json.get(field) {
-                Some(field) => {
-                    let val = field.as_u64().expect(format!("panic since given {} is not integer", field).as_str());
-                    assert!(val > 0, "{}", format!("panic since given {} is not positive integer", field));
+                Some(val) => {
+                    let val = val.as_u64().expect(format!("panic since given {} = {} is not positive integer", field, val).as_str());
+                    assert!(val > 0, "panic since given {} = {} is not positive integer", field, val);
                     val
                 },
                 None => default_val
@@ -110,10 +109,10 @@ impl Config {
 
         let validate_float = |field: &str, default_val: f64| {
             let val = match json.get(field) {
-                Some(field) => {
-                    let val = field.as_f64().expect(format!("panic since given {} is not float", field).as_str());
-                    assert!(val > 0.0, "{}", format!("panic since given {} is not positive float", field));
-                    assert!(val <= 1.0, "{}", format!("panic since given {} is bigger than 1.0", field));
+                Some(val) => {
+                    let val = val.as_f64().expect(format!("panic since given {} = {} is not float", field, val).as_str());
+                    assert!(val > 0.0, "{}", format!("panic since given {} = {} is not positive float", field, val));
+                    assert!(val <= 1.0, "{}", format!("panic since given {} = {} is bigger than 1.0", field, val));
                     val
                 },
                 None => default_val
@@ -122,7 +121,7 @@ impl Config {
         };
 
         // validate input and output in json
-        let corpus_file = validate_str("input_file");
+        let corpus_file = validate_str("corpus_file");
         let output_dir = validate_str("output_dir");
 
         // handle default vs input parameters
@@ -155,6 +154,19 @@ impl Config {
                 num_threads_training: num_threads_training as usize 
             }
         };
+
+        Ok(params)
+
+    }
+
+    pub fn new(args: &[String]) -> Result<Config, Box<dyn Error>> { 
+
+        if args.len() != 2 {
+            return Err(format!("input should be a path to json file only").into());
+        }
+
+        let json = Config::read_json(&args[1]);
+        let params = Config::validate(json)?;
 
         Ok (
             Self {
@@ -317,4 +329,208 @@ pub mod files_handling {
     
         }
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use serde_json::{Value, json};
+    use crate::config;
+
+    #[test]
+    fn config_test_dedault() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some other string",
+        });
+
+
+        let params = match config::Config::validate(json) {
+            Ok(params) => params,
+            Err(e) => panic!("{}", e)
+        };
+
+        assert_eq!(params.corpus_file, "some string");
+        assert_eq!(params.output_dir, "some other string");
+    }
+
+    #[test]
+    fn config_test_input() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "window_size": 1,
+            "saved_counts": false,
+            "num_threads_cooc": 1,
+            "vocab_size": 1, 
+            "max_iter": 2, 
+            "embedding_dim": 3, 
+            "learning_rate": 0.21, 
+            "x_max": 1, 
+            "alpha": 0.01,
+            "batch_size": 1, 
+            "num_threads_training": 1, 
+
+        });
+
+        let params = match config::Config::validate(json) {
+            Ok(params) => params,
+            Err(e) => panic!("{}", e)
+        };
+
+        assert_eq!(params.window_size, 1);
+        assert_eq!(params.saved_counts, Some(false));
+        assert_eq!(params.num_threads_cooc, 1);
+        assert_eq!(params.json_train.vocab_size, 1);
+        assert_eq!(params.json_train.max_iter, 2);
+        assert_eq!(params.json_train.embedding_dim, 3);
+        assert_eq!(params.json_train.learning_rate, 0.21);
+        assert_eq!(params.json_train.x_max, 1 as f32);
+        assert_eq!(params.json_train.alpha, 0.01);
+        assert_eq!(params.json_train.batch_size, 1);
+        assert_eq!(params.json_train.num_threads_training, 1);
+
+
+
+    }
+
+
+    #[test]
+    #[should_panic(expected = "panic since given window_size = 1.0 is not positive integer")]
+    fn config_test_window_size() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "window_size": 1.0,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "panic since given saved_counts is not boolean")]
+    fn config_test_saved_counts() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "saved_counts": 0,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+
+    #[test]
+    #[should_panic(expected = "panic since given num_threads_cooc = -1 is not positive integer")]
+    fn config_test_num_threads_cooc() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "num_threads_cooc": -1,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "panic since given vocab_size = 0 is not positive integer")]
+    fn config_test_vocab_size() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "vocab_size": 0,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "panic since given max_iter = -10.0 is not positive integer")]
+    fn config_test_max_iter() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "max_iter": -10.0,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "panic since given embedding_dim = 100.4 is not positive integer")]
+    fn config_test_embedding_dim() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "embedding_dim": 100.4,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+
+    #[test]
+    #[should_panic(expected = "panic since given x_max = 1.0 is not positive integer")]
+    fn config_test_x_max() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "x_max": 1.0,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    fn config_test_batch_size() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "batch_size": 89,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    fn config_test_num_threads_training() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "num_threads_training": 9,
+        });
+
+        if let Err(e)= config::Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
 }

@@ -5,7 +5,6 @@
 	"embedding_dim": 300,
 	"window_size": 10,
 	"batch_size": 32,
-	"vocab_size": 400000,
-	"for_comments": ""
+	"vocab_size": 400000
 }
 
