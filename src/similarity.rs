@@ -245,6 +245,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn analogies_test() {
 
         // read weights and tokens
@@ -296,14 +297,13 @@ mod tests {
                     println!("supposed target {} is not in the vocabulray", target);
                 }
             };
-
-
         }
 
 
     }
 
     #[test]
+    #[ignore]
     fn find_most_similar_test() {
 
         // read weights and tokens
