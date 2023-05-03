@@ -5,7 +5,11 @@ use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
 use plotters::{prelude::*, style::text_anchor::*};
 
-//#[allow(dead_code)]
+// this module has some check on trained vectors, functionallity to get
+// the K most similar words to a given word.
+// the K most similar words to a combination of words.
+// plotting words to 2d (should be changed to PCA later)
+
 pub struct Similarity {
     w: Array2<f32>,
     t2i: HashMap<String, usize>,
@@ -18,8 +22,7 @@ impl Similarity {
     pub fn new(w: &mut Array2<f32>, t2i: HashMap<String, usize>) -> Similarity {
         
         // w is of shape (vocab_size, embedding_dim)
-
-        // need to normalize w so each entry norm l2 is 1
+        // w entries are normalized to have a l2 norm of 1
         for mut row in w.axis_iter_mut(Axis(0)) {
             let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
             row.mapv_inplace(|a| (a / norm).abs());
@@ -42,8 +45,11 @@ impl Similarity {
 
     pub fn draw_tokens_2d(&self, save_to: &str, k: usize, use_tokens: Option<Vec<String>>) -> Result<(), Box<dyn Error>> {
       
+        // this method draws tokens on a 2d plane and saves the img to save_to
+        // the k tokens can be sampled randomly, or m tokens can be given by the user.
+
         // Instead of implementating a PCA I am going to plot on the x axis the mean of the vectors
-        // and on the y axis the max of the vectors.
+        // and on the y axis the max of the vectors. SHould be changed sometime.
 
         const MARGIN: u32 = 15;
         const FONT_STYLE: (&str, i32) = ("sans-serif", 20);
@@ -61,7 +67,6 @@ impl Similarity {
         };
 
         // get plotting data, projection should be of shape (k, 2)
-
         let (projections, axes) = self.get_2dim_projections(&sliced_w)?;
 
         let root_area = BitMapBackend::new(save_to, (640, 640)).into_drawing_area();
@@ -71,7 +76,6 @@ impl Similarity {
         let x_spec: Range<f32> = Range{start: axes[0], end: axes[1]};
         let y_spec: Range<f32> = Range{start: axes[2], end: axes[3]};
 
-        // x axis is removed thus doesn't need much space compared to y axis
         let mut chart = ChartBuilder::on(&root_area)
         .margin(MARGIN)
         .x_label_area_size(10)
@@ -93,7 +97,7 @@ impl Similarity {
         .with_anchor::<RGBColor>(Pos::new(HPos::Center, VPos::Center))
         .into_text_style(chart.plotting_area());
 
-        // a closure for token label and position
+        // a closure for token label and position on the 2d plane
         let position_and_word = |x: f32, y: f32, token: String| {
             return EmptyElement::at((x,y))
                 + Circle::new((0, 0), 3, ShapeStyle::from(&BLACK).filled())
@@ -104,6 +108,7 @@ impl Similarity {
                 );
         };
 
+        // draw every token on the canves
         for i in 0..tokens.len() {
             let token = tokens.get(i).unwrap().to_string(); // safe, tokens is the enumerator
             // positions should be of shape (2,), from (k, 2)
@@ -119,6 +124,8 @@ impl Similarity {
 
     fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
 
+        // get w and tokens sliced on the requested tokens only
+
         assert_eq!(self.w.dim().0, self.t2i.len(), "inconsistent number of entries in w and tokens");
         assert!(k > 0, "k most be positive");
 
@@ -127,7 +134,7 @@ impl Similarity {
             None => (0..self.t2i.len()).choose_multiple(&mut thread_rng(), k)
         };
         
-        // slice w and tokens ( maintain order ?)
+        // slice w and tokens ( this should maintain order )
         let sliced_w: Array2<f32> = self.w.select(Axis(0), &indices);
         let tokens: Vec<String> = indices.iter().map(|i| {
             self.i2t.get(i)
@@ -141,6 +148,9 @@ impl Similarity {
     }
 
     fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
+
+        // move from w second ax from embedding_dim to 2
+        // corrently computed as the mean and max of the values, but should be replaced with PCA... 
 
         // w is of shape (k, embedding_dim), should return a slice (k, 2) with the max and mean values
         let (k, _) = &w.dim();
@@ -166,7 +176,10 @@ impl Similarity {
         Ok((projections, [x_min-epsi, x_max+epsi, y_min-epsi, y_max+epsi]))
     }
 
+
     pub fn extract_analogy_vec(&self, inputs: [&str; 3]) -> Result<Array1<f32>, Box<dyn Error>> {
+
+        // given 3 strings of tokens, compute the analogy linear combination of their vectors.
 
         // by input order should be 0 = -, 1 = +, 2 = +
         // put (-) of the first item
@@ -179,13 +192,14 @@ impl Similarity {
 
     pub fn extract_analogies(&self, inputs: [&str; 3], k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
         
+        // get the k most similar words (and sim - scores) to the linear combination of inputs 
         let analogy = self.extract_analogy_vec(inputs)?;
         let best_analogies = self.find_k_most_similar(&analogy, k)?;
         Ok(best_analogies)
     }
 
     pub fn extract_vec_from_word(&self, token: &str) -> Result<Array1<f32>, Box<dyn Error>> {
-
+        // given token string extract the vector of that string from w
         match self.t2i.get(token) {
             Some(i) => return Ok(self.w.slice(s![*i, ..]).to_owned()),
             None => return Err(format!("token: {} is not in most frequent tokens", token).into())
@@ -194,6 +208,8 @@ impl Similarity {
     }
 
     pub fn find_k_most_similar(&self, vec: &Array1<f32>, k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
+
+        // given a vector of embedding_dim size, get the k most similar tokens to that vector and the scores
 
         assert!(k < self.w.dim().0, "k most be smaller than the vocabulary, but {} given", k);
 
@@ -224,21 +240,23 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use ndarray::Array2;
-    use crate::config;
-    use crate::similarity::Similarity;
+    use crate::config::files_handling;
+    use super::Similarity;
     
+    // tests are currently not actual tests, but more printing of analogies between words that should make sense.
+
     const WEIGHTS_PATH: &str = "Output/vecs";
     const TOKENS_PATH: &str = "Output/words";
 
     fn read_weights() -> Array2<f32> {
-        match config::files_handling::read_input::<Array2<f32>>(WEIGHTS_PATH) {
+        match files_handling::read_input::<Array2<f32>>(WEIGHTS_PATH) {
             Ok(w) => w,
             Err(e) => panic!("{}", e)
         }
     }
 
     fn read_t2i() -> HashMap<String, usize> {
-        match config::files_handling::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
+        match files_handling::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
             Ok(t2i) => t2i,
             Err(e) => panic!("{}", e)
         }
@@ -258,7 +276,7 @@ mod tests {
 
         // a is to b as like c is to ?
         // translates to b - a + c : ?
-        // high is to higher as like good is to : better
+        // i.e : high is to higher as like good is to : better
         let inputs = [
             ["king", "queen", "man", "woman"],
             ["go", "goes", "say", "says"],
@@ -346,7 +364,7 @@ mod tests {
         let output_dir = "Img";
         if let Err(e) = fs::create_dir_all(output_dir) { panic!("{}", e) }
 
-        // run similarity test
+        // plot random token vectors on 2d plane
         let sim_obj = Similarity::new(&mut w, t2i);
         let saved_to = format!("{}/2d-rand.png", output_dir);
         if let Err(e) = sim_obj.draw_tokens_2d(&saved_to, 100, None) {
@@ -366,7 +384,7 @@ mod tests {
         let output_dir = "Img";
         if let Err(e) = fs::create_dir_all(output_dir) { panic!("{}", e) }
 
-        // run similarity test
+        // plot requested token vectors on 2d plane
         let sim_obj = Similarity::new(&mut w, t2i);
         let saved_to = format!("{}/2d-manual.png", output_dir);
         let tokens = [
