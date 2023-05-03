@@ -61,6 +61,45 @@ impl Train {
         });
     }
 
+    fn compute_loss_and_grads(
+        xs: &Array2<f32>,
+        x_max: f32,
+        alpha: f32,
+        this_batch: usize,
+        weights: &Vec<Array2<f32>>
+     ) -> Result<(Array2<f32>, [Array2<f32>; 4]), Box<dyn Error>> {
+
+        let v_tok = weights.get(0).ok_or("no v_tok given")?;
+        let v_context = weights.get(1).ok_or("no v_context given")?;
+        let b_tok = weights.get(2).ok_or("no b_tok given")?;
+        let b_context = weights.get(3).ok_or("no b_context given")?;
+
+        // weight and move to nd array to speed computations, shape (this_batch, 1)
+        let mut xs_weighted: Array2<f32> = xs.clone();
+        Train::weighting_x(&mut xs_weighted, x_max, alpha);
+
+        // w_tok * w_context should be of shape => (this_batch, emebedding_dim) * (this_batch, emebedding_dim) => (this_batch, 1)
+        // diff is of size (this_batch, 1)
+        let dp: Array2<f32> = (v_tok * v_context).sum_axis(Axis(1)).to_shape((this_batch, 1))?.to_owned();
+        let diff: Array2<f32> = &dp + b_tok + b_context - &xs.mapv(f32::ln);
+
+        // compute loss for batch
+        // need to be careful with sum here, it can reach total_examples.sum() / batch size
+        // so basically the batch size needs to be larger than n_slices to avoid a worst case collapse
+        let local_batch_loss: Array2<f32> = 0.5 * &xs_weighted * &diff.mapv(|x| x.powi(2));
+
+        // dl_dw_tok is (this_batch, embedding_dim)
+        // dl_db is (this_batch, 1)
+        let dl_dw = &xs_weighted * &diff;
+        let dl_dw_tok: Array2<f32> = v_context * &dl_dw;
+        let dl_dw_context: Array2<f32> = v_tok * &dl_dw;
+        let dl_db: Array2<f32> = dl_dw.clone();
+
+        Ok((local_batch_loss, [dl_dw_tok, dl_dw_context, dl_db.clone(), dl_db]))
+
+
+    }
+
     fn do_training_slice(&mut self, 
            slice_arr: &Array2<f32>,
            train_params: &JsonTrain,
@@ -123,6 +162,7 @@ impl Train {
                 let v_context: Array2<f32> = self.w_context.select(Axis(0), js);
                 let b_tok: Array2<f32> = self.b_tokens.select(Axis(0), is);
                 let b_context: Array2<f32> = self.b_context.select(Axis(0), js);                
+                let weights: Vec<Array2<f32>> = vec![v_tok, v_context, b_tok, b_context];
 
                 // get the rows of the ag gradients
                 // dimensions of (this_batch, embedding_dim) for v
@@ -133,42 +173,24 @@ impl Train {
                 let mut g_b_tok: Array2<f32> = self.ag_b_tok.select(Axis(0), is);
                 let mut g_b_context: Array2<f32> = self.ag_b_context.select(Axis(0), js);
 
-                // weight and move to nd array to speed computations, shape (this_batch, 1)
-                let mut xs_weighted: Array2<f32> = xs.clone();
-                Train::weighting_x(&mut xs_weighted, x_max, alpha);
-
-                // w_tok * w_context should be of shape => (this_batch, emebedding_dim) * (this_batch, emebedding_dim) => (this_batch, 1)
-                // diff is of size (this_batch, 1)
-                let dp: Array2<f32> = (&v_tok * &v_context).sum_axis(Axis(1)).to_shape((this_batch, 1))?.to_owned();
-                let diff: Array2<f32> = &dp + &b_tok + &b_context - &xs.mapv(f32::ln);
-
-                // compute loss for batch
-                // need to be careful with sum here, it can reach total_examples.sum() / batch size
-                // so basically the batch size needs to be larger than n_slices to avoid a worst case collapse
-                let local_batch_loss: Array2<f32> = 0.5 * &xs_weighted * &diff.mapv(|x| x.powi(2));
+                let (local_batch_loss, [dl_dw_tok, dl_dw_context, dl_db_tok, dl_db_context]): (Array2<f32>, [Array2<f32>; 4]) = Train::compute_loss_and_grads(&xs, x_max, alpha, this_batch, &weights)?;
+                
                 let local_loss = local_batch_loss.mean().ok_or("problem in loss calculation")?;
                 *epoch_loss += local_loss;
                 *total_loss += 1.0;
-
-                // dl_dw_tok is (this_batch, embedding_dim)
-                // dl_db is(this_batch, 1)
-                let dl_dw = &xs_weighted * &diff;
-                let dl_dw_tok: Array2<f32> = &v_context * &dl_dw;
-                let dl_dw_context: Array2<f32> = &v_tok * &dl_dw;
-                let dl_db: Array2<f32> = dl_dw;
 
                 // the full derivative updates
                 // if sqrt is zero somthing went wrong...
                 let dw_tok_update: &Array2<f32> = &(learning_rate * &dl_dw_tok / &g_v_tok.mapv(f32::sqrt));
                 let dw_context_update: &Array2<f32> = &(learning_rate * &dl_dw_context / &g_v_context.mapv(f32::sqrt));
-                let db_tok_update: &Array2<f32> = &(learning_rate * &dl_db / &g_b_tok.mapv(f32::sqrt));
-                let db_context_update: &Array2<f32> = &(learning_rate * &dl_db / &g_b_context.mapv(f32::sqrt));
+                let db_tok_update: &Array2<f32> = &(learning_rate * &dl_db_tok / &g_b_tok.mapv(f32::sqrt));
+                let db_context_update: &Array2<f32> = &(learning_rate * &dl_db_context / &g_b_context.mapv(f32::sqrt));
 
                 // the full grad update
                 g_v_tok = &dl_dw_tok * &dl_dw_tok;
                 g_v_context = &dl_dw_context * &dl_dw_context;
-                g_b_tok = &dl_db * &dl_db;
-                g_b_context = &dl_db * &dl_db;
+                g_b_tok = &dl_db_tok * &dl_db_tok;
+                g_b_context = &dl_db_context * &dl_db_context;
 
                 // update by index,
                 // done in a loop since no select_mut by non-consecutive indexes is available
@@ -318,4 +340,101 @@ impl DisplayProgress {
         self.total_examples = total_examples
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+
+    use ndarray::{Array2, Array, array};
+    use ndarray_rand::{RandomExt, rand_distr::Uniform};
+    use ndarray_stats::QuantileExt;
+    use crate::train::Train;
+
+    #[test]
+    fn gradients_test() {
+
+        // check gradient, cost formula for some x_i_j and grads for params (w, b)
+        // cost = 0.5 * f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)) **2 )
+        // dx_dw_i = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_j
+        // dx_dw_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_i
+        // dx_db_i = dx_db_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)
+
+        let x_values = vec![50.0, 0.05, 43.01, 101.1, 0.002];
+        for x_val in x_values {
+
+            let input: Vec<f32> = vec![x_val];
+            let embedding_dim = 100;
+            let batch_size = input.len();
+            let x_max = 100.0;
+            let alpha = 0.75;
+            let epsilon = 0.01; // !!!!!!!!!!
+            assert_eq!(1, batch_size);
+
+            let x = Array2::from_shape_vec((batch_size, 1), input).unwrap();
+            let w_i = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let w_j = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let b_i = Array::random((batch_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let b_j = Array::random((batch_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let weights: Vec<Array2<f32>> = vec![w_i, w_j, b_i, b_j];
+
+            // compute gradients on x and weights
+            let (_, gradients): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights) {
+                Ok(res) => res,
+                Err(e) => panic!("{}", e)
+            };
+
+            // compute aprroximation
+            let mut weights_copy: Vec<Array2<f32>> = weights.clone();
+            for (i, weight) in weights.iter().enumerate() {
+
+                // weight is (1, embedding_size / 1)
+                for ((r, c), _v) in weight.indexed_iter() {
+                    assert_eq!(r, 0);
+                    {
+                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    *val += epsilon;
+                    }
+                    //assert_eq!(*weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v + epsilon);
+                    let (plus, _): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights_copy) {
+                        Ok(res) => res,
+                        Err(e) => panic!("{}", e)
+                    };
+
+                    {
+                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    *val -= 2.0*epsilon;
+                    }
+                    //assert_eq!(*weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v - epsilon);
+                    let (minus, _): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights_copy) {
+                        Ok(res) => res,
+                        Err(e) => panic!("{}", e)
+                    };
+
+                    {
+                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    *val += epsilon;
+                    }
+                    //assert_eq!(weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v);
+
+                    // compare per example in batch
+                    // (1, 1) becuse batch size is 1
+                    assert_eq!((&plus).dim(), (1,1));
+                    let plus = plus[[0,0]];
+                    assert_eq!((&minus).dim(), (1,1));
+                    let minus = minus[[0,0]];
+
+                    let prediction_grad = (plus - minus) / (2.0 * epsilon);
+                    let gold_grad = gradients[i][[r, c]];
+
+                    //let difference = (prediction_grad - gold_grad).powi(2).sqrt() / ((prediction_grad.powi(2).sqrt()) + (gold_grad.powi(2).sqrt()));
+                    let difference = (prediction_grad - gold_grad).abs() / array![1.0, prediction_grad.abs(), gold_grad.abs()].max().unwrap();
+                    if difference > epsilon {
+                        println!("failed, {}, {}, {}", difference, gold_grad, prediction_grad);
+                    }   
+                }
+            }
+        }
+
+
+    }
 }

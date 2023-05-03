@@ -26,40 +26,44 @@ impl Counts {
         };
     }
 
-    fn parse_line(line: String) -> String {
+    fn parse_line(line: String, use_os: bool) -> String {
         // remove intial and trailing spaces, move to lower case
         // add end-of-sequence and start-of-sequence tokens
-        let line_str = ["SOS", &line.trim().to_lowercase(), "EOS"].map(|x| x.to_string()).to_vec().join(" ");
+        let mut line_str = [&line.trim().to_lowercase()].map(|x| x.to_string()).to_vec().join(" ");
+        if use_os {
+            line_str.push_str(" EOS");
+            line_str.insert_str(0, "SOS ");
+        }
         line_str
     }
 
-    fn load(file_path: &str, sequences: &mut Vec<Vec<String>>) -> Result<HashMap<String, usize>, Box<dyn Error>> {
+    fn accumulate(line: String, token2count: &mut HashMap<String, usize>, sequences: &mut Vec<Vec<String>>, use_os: bool) {
 
-        let mut token2count: HashMap<String, usize> = HashMap::new();
-        let lines = Counts::read_file(file_path)?;
-        
-        for line in lines {            
+        let sequence = Counts::parse_line(line, use_os);
+        let split_sequence = Counts::tokenize(&sequence);
 
-            let sequence = Counts::parse_line(line?);
-            let split_sequence = Counts::tokenize(&sequence);
+        // accumulate occurences of words
+        for tok in &split_sequence {
 
-            // accumulate occurences of words
-            for tok in &split_sequence {
-
-                let val = token2count.entry(tok.to_owned()).or_insert(0);
-                *val += 1;
-            }
-
-            sequences.push(split_sequence);
-
+            let val = token2count.entry(tok.to_owned()).or_insert(0);
+            *val += 1;
         }
 
-        Ok(token2count)
+        sequences.push(split_sequence);
 
     }
 
+    fn load(file_path: &str, sequences: &mut Vec<Vec<String>>, token2count: &mut HashMap<String, usize>, use_os: bool) -> Result<(), Box<dyn Error>> {
 
-    fn build_vocab(token2count: HashMap<String, usize>, vocab_size: usize, t2i: &mut HashMap<String, usize>) {
+        let lines = Counts::read_file(file_path)?;        
+        for line in lines {            
+            Counts::accumulate(line?, token2count, sequences, use_os)
+        }
+        Ok(())
+    }
+
+
+    fn build_vocab(token2count: HashMap<String, usize>, vocab_size: usize, t2i: &mut HashMap<String, usize>, use_shuffle: bool) {
         
         // get most frequenct tokens after sorting
         let mut tup = token2count
@@ -69,8 +73,11 @@ impl Counts {
         tup.sort_by_key(|k| k.1);
         tup.reverse();
         tup.truncate(vocab_size);
-        tup.shuffle(&mut thread_rng());
-
+        
+        if use_shuffle {
+            tup.shuffle(&mut thread_rng());
+        }
+        
         // populate t2i with the most frequent tokens
         (0..vocab_size).into_iter().for_each(|i| { t2i.entry((&tup[i].0).to_owned()).or_insert(i);});
 
@@ -84,7 +91,7 @@ impl Counts {
         tup2cooc: &mut HashMap<(usize, usize), f32>, 
         t2i: &HashMap<String, usize>, 
         slice: &Range<usize>, 
-        thread_i: usize) -> Result<(), Box<dyn Error>> {
+        thread_i: Option<usize>) -> Result<(), Box<dyn Error>> {
 
         // update x_mat for the co-occurences of a pivot token and context tokens in window
         // the contribution is relative to the distance, 1/d
@@ -93,8 +100,8 @@ impl Counts {
         let n = sequences.len();
         for (_k, sequence) in sequences.iter().enumerate() {
 
-            if _k % 200000 == 0 {
-                println!("within thread {}, counted {}", thread_i, 100.0*(_k as f32 / n as f32));
+            if thread_i.is_some() && _k % 200000 == 0 {
+                println!("within thread {}, counted {}",thread_i.unwrap(), 100.0*(_k as f32 / n as f32));
             }
 
             let n = sequence.len() as i32;
@@ -109,7 +116,7 @@ impl Counts {
                 };
 
                 // build in symmetry
-                for j in i+1..window_size+i {
+                for j in i+1..=window_size+i {
 
                     if j >=n { break }
 
@@ -151,7 +158,7 @@ impl Counts {
         println!("thread {}, working on vocab slice {:?}", thread_i, slice);
         let mut tup2cooc: HashMap<(usize, usize), f32> = HashMap::new();
 
-        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc, &t2i, slice, thread_i) {
+        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc, &t2i, slice, Some(thread_i)) {
             panic!("{}", e);
         };
 
@@ -175,9 +182,12 @@ impl Counts {
         let input_file = params.corpus_file.as_ref();
         let mut vocab_size = params.json_train.vocab_size;
         let window_size = params.window_size;
+        let use_os = true; // wrap sequences with SOS and EOS
+        let use_shuffle = true;
 
         let mut sequences = Vec::new();
-        let token2count = Counts::load(input_file, &mut sequences)?;
+        let mut token2count: HashMap<String, usize> = HashMap::new();
+        Counts::load(input_file, &mut sequences, &mut token2count, use_os)?;
 
         // set vocab size to be the min between vocab size and the number of unique tokens found
         if token2count.len() < vocab_size {
@@ -187,7 +197,7 @@ impl Counts {
 
         // now build matrices and vocab
         let mut t2i: HashMap<String, usize> = HashMap::new();
-        Counts::build_vocab(token2count, vocab_size, &mut t2i);
+        Counts::build_vocab(token2count, vocab_size, &mut t2i, use_shuffle);
 
         // count co-occurences
         // counting is done in parts to enable large vocabulary without allocation failure
@@ -231,4 +241,57 @@ impl Tokeniizer for Counts {
     fn tokenize(sequence: &str) -> Vec<String> {
         return sequence.split(' ').map(|x| x.to_string()).collect();
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use std::collections::HashMap;
+    use crate::cooccurrence::Counts;
+
+    #[test]
+    fn cooc_test() {
+        
+        // create some dummy data
+        let sentences = [
+            "What you say makes a lot of sense to me , you are right",
+            "Are you playing basketball just for fun or are you a pro ?"
+        ];
+
+        let vocab_size = 3; // only top 3 most common, [are, you, a]
+        let window_size = 10; // words to the right
+        let slice = 0..vocab_size; // do in one pass
+        let use_os = false;
+        let use_shuffle = false;
+
+        // counts are saved one-sided, symmetry happens before training
+        let mut tup2count_golden: HashMap<(usize, usize), f32> = HashMap::new();
+        tup2count_golden.insert((0 ,0), 1.0 / 10.0 + 1.0 / 8.0);
+        tup2count_golden.insert((0 ,1), 1.0 / 1.0 + 1.0 / 7.0);
+        tup2count_golden.insert((0 ,2), 1.0 / 3.0 + 1.0 / 9.0 + 1.0 / 1.0);
+        tup2count_golden.insert((1 ,0), 1.0 / 1.0 + 1.0 / 9.0 + 1.0 / 1.0);
+        tup2count_golden.insert((1 ,1), 1.0 / 8.0);
+        tup2count_golden.insert((1 ,2), 1.0 / 10.0 + 1.0 / 2.0);
+        tup2count_golden.insert((2 ,0), 1.0 / 7.0);
+        tup2count_golden.insert((2 ,1), 1.0 / 8.0);
+
+        // run algorithm result
+        let mut token2count_alg = HashMap::new();
+        let mut sequences = Vec::new();
+        for line in sentences {
+            Counts::accumulate(line.to_string(), &mut token2count_alg, &mut sequences, use_os);
+        }
+        let mut t2i_alg: HashMap<String, usize> = HashMap::new();
+        Counts::build_vocab(token2count_alg, vocab_size, &mut t2i_alg, use_shuffle);
+
+        let mut tup2cooc_alg: HashMap<(usize, usize), f32> = HashMap::new();
+        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc_alg, &t2i_alg, &slice, None) {
+            panic!("{}", e);
+        };
+
+        assert_eq!(tup2cooc_alg, tup2count_golden);
+
+    }
+
 }

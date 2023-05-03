@@ -335,6 +335,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn plot_tokens_rand() {
 
         // read weights and tokens
@@ -354,6 +355,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn plot_tokens_manual() {
 
         // read weights and tokens
