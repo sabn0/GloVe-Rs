@@ -8,7 +8,31 @@ use std::io::{prelude::*, {BufWriter, BufReader, IoSlice}};
 use flate2::{Compression, read::GzDecoder};
 use flate2::write::GzEncoder;
 
+// wrapper around parameters for the program (cocc and train)
+#[derive(Clone, Debug)]
+pub struct JsonTypes {
+    pub corpus_file: String,
+    pub output_dir: String,
+    pub window_size: usize,
+    pub saved_counts: Option<bool>,
+    pub num_threads_cooc: usize,
+    pub json_train: JsonTrain
+}
 
+impl Display for JsonTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "using hyper-params:
+        corpus_file: {}
+        output_dir: {}
+        window_size: {}
+        saved_counts: {:?}
+        num_threads_cooc: {},
+        {}",
+        self.corpus_file, self.output_dir, self.window_size, self.saved_counts, self.num_threads_cooc, self.json_train)
+    }
+}
+
+// wrapper around parameters for the training part
 #[derive(Clone, Debug)]
 pub struct JsonTrain {
     pub vocab_size: usize,
@@ -39,29 +63,8 @@ impl Display for JsonTrain {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct JsonTypes {
-    pub corpus_file: String,
-    pub output_dir: String,
-    pub window_size: usize,
-    pub saved_counts: Option<bool>,
-    pub num_threads_cooc: usize,
-    pub json_train: JsonTrain
-}
 
-impl Display for JsonTypes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "using hyper-params:
-        corpus_file: {}
-        output_dir: {}
-        window_size: {}
-        saved_counts: {:?}
-        num_threads_cooc: {},
-        {}",
-        self.corpus_file, self.output_dir, self.window_size, self.saved_counts, self.num_threads_cooc, self.json_train)
-    }
-}
-
+// validation of input arguments
 pub struct Config {
     params: JsonTypes
 }
@@ -73,12 +76,13 @@ impl Config {
     }
 
     fn read_json(json_path: &String) -> Value {
-        // parse input json
         let f = fs::File::open(json_path).expect("cannot open json file");
         let json: Value = serde_json::from_reader(f).expect("cannot read json file");
         json
     }
 
+    // the input json has many fields of hyper parameters, this function mainly performs checks 
+    // for data types.
     fn validate(json: Value) -> Result<JsonTypes, Box<dyn Error>> {
 
         let validate_str = |field: &str| {
@@ -120,11 +124,12 @@ impl Config {
             val
         };
 
-        // validate input and output in json
+        // validate input and output in json - most be given
         let corpus_file = validate_str("corpus_file");
         let output_dir = validate_str("output_dir");
 
         // handle default vs input parameters
+        // requested parameters overwrite the default parameters
         let vocab_size = validate_positive_integer("vocab_size", 400000);
         let max_iter = validate_positive_integer("max_iter", 50);
         let embedding_dim = validate_positive_integer("embedding_dim", 300);
@@ -159,6 +164,7 @@ impl Config {
 
     }
 
+    // program should receive one arguments, path to json
     pub fn new(args: &[String]) -> Result<Config, Box<dyn Error>> { 
 
         if args.len() != 2 {
@@ -177,34 +183,42 @@ impl Config {
     
 }
 
+// this module orgenizes read and write options using different data structures in the program
+// currently supporting 
+// HashMap<String, usize>   (tokens),
+// Array2<f32>              (vecs)
+// Vec<Vec<u8>>             (coocs),
 pub mod files_handling {
 
     use super::*;
 
+    // this method is called in order to read an input of type R from file_path for supported types
     pub fn read_input<R: ReadFile>(file_path: &str) -> Result<<R as ReadFile>::Item, <R as ReadFile>::Error> {
         let input = <R as ReadFile>::reaf_file(file_path)?;
         Ok(input)
     }
     
+    // this method is called in order to write an input of type R for supported types, into output_dir + file_name + ext
     pub fn save_output<S: SaveFile>(output_dir: &str, file_name: &str, item: S) -> Result<(), <S as SaveFile>::Error> {
         
         // create output folder
         if let Err(e) = fs::create_dir_all(output_dir) {
             panic!("{}", e)
         }
-        
-        // SaveFile can be Array2<f32> or Vec<String>
+
         item.save_file(output_dir, file_name)?;
         return Ok(())
     
     }
-    
+
+    // this trait defines the reading behavior types should obey to    
     pub trait ReadFile {
         type Error;
         type Item;
         fn reaf_file(file_path: &str) -> Result<Self::Item, Self::Error>;
     }
     
+    // this trait defines the writing behavior types should obey to
     pub trait SaveFile {
         type Error;
         fn save_file(&self, output_dir: &str, file_name: &str) -> Result<(), Self::Error>;
@@ -231,7 +245,7 @@ pub mod files_handling {
             return Ok(())
         }
     }
-    // trained vec are read with this implementation
+    // trained vecs are read with this implementation
     impl ReadFile for Array2<f32> {
         type Error = Box<dyn Error>;
         type Item = Self;
@@ -241,7 +255,7 @@ pub mod files_handling {
             Ok(item)
         }
     }
-    // trained vec are saved with this implementation
+    // trained vecs are saved with this implementation
     impl SaveFile for Array2<f32> {
         type Error = Box<dyn Error>;
         fn save_file(&self, output_dir: &str, file_name: &str) -> Result<(), Self::Error> {
@@ -335,8 +349,10 @@ pub mod files_handling {
 #[cfg(test)]
 mod tests {
 
+    // tests mainly validate data types of inputs compliance
+
     use serde_json::{Value, json};
-    use crate::config;
+    use super::Config;
 
     #[test]
     fn config_test_dedault() {
@@ -347,7 +363,7 @@ mod tests {
         });
 
 
-        let params = match config::Config::validate(json) {
+        let params = match Config::validate(json) {
             Ok(params) => params,
             Err(e) => panic!("{}", e)
         };
@@ -376,7 +392,7 @@ mod tests {
 
         });
 
-        let params = match config::Config::validate(json) {
+        let params = match Config::validate(json) {
             Ok(params) => params,
             Err(e) => panic!("{}", e)
         };
@@ -408,7 +424,7 @@ mod tests {
             "window_size": 1.0,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -423,7 +439,7 @@ mod tests {
             "saved_counts": 0,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -439,7 +455,7 @@ mod tests {
             "num_threads_cooc": -1,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -454,7 +470,7 @@ mod tests {
             "vocab_size": 0,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -469,7 +485,7 @@ mod tests {
             "max_iter": -10.0,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -484,7 +500,7 @@ mod tests {
             "embedding_dim": 100.4,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -500,7 +516,7 @@ mod tests {
             "x_max": 1.0,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -514,7 +530,7 @@ mod tests {
             "batch_size": 89,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
@@ -528,7 +544,7 @@ mod tests {
             "num_threads_training": 9,
         });
 
-        if let Err(e)= config::Config::validate(json) {
+        if let Err(e)= Config::validate(json) {
             panic!("{}", e);
         }
     }
