@@ -1,7 +1,6 @@
 
 use core::panic;
 use std::{error::Error, env, fs::File, io::{self, BufRead}};
-extern crate glove_trainer;
 use glove_trainer::Similarity;
 
 
