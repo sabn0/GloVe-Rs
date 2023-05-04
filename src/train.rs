@@ -376,7 +376,7 @@ mod tests {
     use ndarray::{Array2, Array, array};
     use ndarray_rand::{RandomExt, rand_distr::Uniform};
     use ndarray_stats::QuantileExt;
-    use crate::train::Train;
+    use super::Train;
 
     // I include a gradient check test, based on cost and grads formula
     // with the approximation of numerical gradients. 
