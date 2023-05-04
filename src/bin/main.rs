@@ -1,6 +1,6 @@
 
-use glove_trainer::Run;
+use glove_trainer::Pipeline;
 
 fn main() {
-    Run::run();
+    Pipeline::run();
 }

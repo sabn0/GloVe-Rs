@@ -11,9 +11,9 @@ use std::time::Instant;
 use ndarray::Array2;
 use bincode::deserialize;
 
-pub struct Run {}
+pub struct Pipeline {}
 
-impl Run {
+impl Pipeline {
 
     // run main procedure of 3 steps -
     // -> configuration of arguments
