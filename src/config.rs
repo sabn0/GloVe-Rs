@@ -229,8 +229,7 @@ pub mod files_handling {
         type Error = std::io::Error;
         type Item = Self;
         fn reaf_file(file_path: &str) -> Result<Self::Item, Self::Error> {
-            let in_file = file_path.to_string() + ".txt";
-            let f = File::open(in_file)?;
+            let f = File::open(file_path)?;
             let item = serde_json::from_reader(f)?;
             return Ok(item)
         }
@@ -250,8 +249,7 @@ pub mod files_handling {
         type Error = Box<dyn Error>;
         type Item = Self;
         fn reaf_file(file_path: &str) -> Result<Self::Item, Self::Error> {
-            let in_file = file_path.to_string() + ".npy";
-            let item = read_npy(in_file)?;
+            let item = read_npy(file_path)?;
             Ok(item)
         }
     }

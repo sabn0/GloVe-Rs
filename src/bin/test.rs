@@ -17,7 +17,7 @@ fn main() {
     // path to input based on selector (quads or singles) 
     // path to trained vecs (npy)
     // path to tokens (txt)
-    // example: ... a Input/analogies.txt Output/vecs.npy Output words.txt
+    // example: cargp run --bin a Input/analogies.txt Output/vecs.npy Output/words.txt
     let args: Vec<String> = env::args().collect();
     if args.len() != 5 { panic!("input arguments 2, 3 should be path to npy followed by path to txt"); }
     let selector = &args[1];
