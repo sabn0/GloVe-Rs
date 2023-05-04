@@ -8,8 +8,6 @@ use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
 use plotters::{prelude::*, style::text_anchor::*};
 
-
-
 // this module has functionallity on trained vectors:
 // the K most similar words to a given word.
 // the K most similar words to a combination of words.
