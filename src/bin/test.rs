@@ -27,9 +27,9 @@ fn main() {
     let lines = io::BufReader::new(open_in_file).lines();
 
     // read in trained vecs and tokens
-    let mut w = Similarity::read_weights(&args[3]);
+    let w = Similarity::read_weights(&args[3]);
     let t2i = Similarity::read_t2i(&args[4]);
-    let sim_obj = Similarity::new(&mut w, t2i);
+    let sim_obj = Similarity::new(w, t2i);
 
     // match the input selector
     match selector.as_str() {
@@ -112,9 +112,9 @@ fn run_similarity(inputs: &[String], k: usize, similarity_object: Similarity) ->
 
         println!("searching {} most similar words to {}", k, token);
         let vec = similarity_object.extract_vec_from_word(token)?;
-        let analogies = similarity_object.find_k_most_similar(&vec, k)?;
-        for (i, (analogy, score)) in analogies.iter().enumerate() {
-            println!("{} : {} ? {} = {}", i, token, analogy, score);  
+        let similarities = similarity_object.find_k_most_similar(&vec, k)?;
+        for (i, (similar_token, score)) in similarities.iter().enumerate() {
+            println!("{} : {} ? {} = {}", i, token, similar_token, score);  
         }
         println!("\n");
     }

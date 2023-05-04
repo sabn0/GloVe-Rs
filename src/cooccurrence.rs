@@ -259,7 +259,7 @@ mod tests {
     use std::collections::HashMap;
     use super::Counts;
 
-    // the test check the performance of the implementation in counting joined occurrences of pairs with respect
+    // the test checks the performance of the implementation in counting joined occurrences of pairs with respect
     // to a golden example that I computed. This is a small toy example since coming up with larger examples is 
     // cumbersome manully.
 

@@ -14,8 +14,6 @@ use plotters::{prelude::*, style::text_anchor::*};
 // the K most similar words to a given word.
 // the K most similar words to a combination of words.
 // plotting words to 2d (should be changed to PCA later)
-
-
 pub struct Similarity {
     w: Array2<f32>,
     t2i: HashMap<String, usize>,
@@ -25,11 +23,13 @@ pub struct Similarity {
 
 impl Similarity {
 
-    pub fn new(w: &mut Array2<f32>, t2i: HashMap<String, usize>) -> Similarity {
+    pub fn new(w: Array2<f32>, t2i: HashMap<String, usize>) -> Similarity {
         
         // w is of shape (vocab_size, embedding_dim)
         // w entries are normalized to have a l2 norm of 1
-        Similarity::normalize(w);
+        let mut w_normalized = w.clone();
+        Similarity::normalize(&mut w_normalized);
+        assert_eq!(w.dim(), w_normalized.dim());
 
         // get the reverse map of t2i
         let mut i2t: HashMap<usize, String> = HashMap::new();
@@ -38,7 +38,7 @@ impl Similarity {
         }
 
         Self {
-            w: w.clone(),
+            w: w_normalized,
             t2i: t2i,
             i2t: i2t
         }
@@ -47,10 +47,9 @@ impl Similarity {
     fn normalize(w: &mut Array2<f32>) {
         for mut row in w.axis_iter_mut(Axis(0)) {
             let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
-            row.mapv_inplace(|a| (a / norm).abs());
+            assert_ne!(norm, 0.0, "w has a zeros row");
+            row.mapv_inplace(|a| (a / norm));
         }
-        assert!(*w.max().expect("w is not between 0 and 1 after l2 norm") <= 1.0);
-        assert!(*w.min().expect("w is not between 0 and 1 after l2 norm") >= 0.0);
     }
 
     pub fn read_weights(weight_path: &str) -> Array2<f32> {
@@ -147,6 +146,7 @@ impl Similarity {
 
     }
 
+    #[allow(dead_code)]
     fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
 
         // get w and tokens sliced on the requested tokens only
@@ -213,7 +213,11 @@ impl Similarity {
         for i in 1..inputs.len() { // add 1 and 2 to sum
             sum_analogy += &self.extract_vec_from_word(inputs[i])?;
         }
-        Ok(sum_analogy)
+        // normlize sum
+        let mut reshape_analogy: Array2<f32> = sum_analogy.to_shape((1, sum_analogy.dim()))?.to_owned();
+        Similarity::normalize(&mut reshape_analogy);
+        let final_analogy: Array1<f32> = reshape_analogy.slice(s![0, ..]).to_owned();
+        Ok(final_analogy)
     }
 
     pub fn extract_analogies(&self, inputs: [&str; 3], k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
@@ -227,9 +231,9 @@ impl Similarity {
     pub fn extract_vec_from_word(&self, token: &str) -> Result<Array1<f32>, Box<dyn Error>> {
         // given token string extract the vector of that string from w
         match self.t2i.get(token) {
-            Some(i) => return Ok(self.w.slice(s![*i, ..]).to_owned()),
-            None => return Err(format!("token: {} is not in most frequent tokens", token).into())
-        };
+            Some(i) => Ok(self.w.slice(s![*i, ..]).to_owned()),
+            None => Err(format!("token: {} is not in most frequent tokens", token).into())
+        }
 
     }
 
@@ -258,4 +262,111 @@ impl Similarity {
         Ok(sim_tokens)
     }
 
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use std::collections::HashMap;
+    use ndarray::{array, Array2};
+    use super::Similarity;
+
+    #[test]
+    fn analogies_test() {
+
+        // construct dummy weights
+        let w = array![
+            [4.0,1.0,0.5],
+            [3.0,0.7,0.3],
+            [1.0,5.0,5.0],
+            [2.5,0.0,0.5],
+            [10.0,10.0,2.0],
+            [4.0,3.0,9.0],
+            [2.0,9.5,9.6]
+        ];
+        let t2i: HashMap<String, usize> = HashMap::from([
+            ("A".to_string(), 0),
+            ("B".to_string(), 1),
+            ("C".to_string(), 2),
+            ("D".to_string(), 3),
+            ("E".to_string(), 4),
+            ("F".to_string(), 5),
+            ("G".to_string(), 6),
+        ]);
+
+        // A - B + C should be most similar to G
+        let similarity_object = Similarity::new(w, t2i);
+        let source = ["A", "B", "C"];
+        let target = "G";
+        let k = 4;
+        
+        let analogies = match similarity_object.extract_analogies(source, k) {
+            Ok(analogies) => analogies,
+            Err(e) => panic!("{}", e)
+        };
+
+        // G should be the first analogy excluding A,B,C
+        assert_eq!(analogies.len(), k);
+        let mut found = false;
+        for (analogy, _) in analogies.iter() {
+            if analogy == target {
+                found = true;
+                break;
+            } else {
+                assert_eq!(source.contains(&analogy.as_str()), true);
+            }
+        }
+        assert_eq!(found, true);
+
+    }
+
+    #[test]
+    fn similarity_test() {
+
+        // construct dummy weights
+        let w = array![
+            [2.0,2.0,1.0],
+            [0.0,0.0,1.0],
+            [-3.0,0.0,1.0],
+            [2.5,4.0,0.5],
+            [0.0,1.0,2.0]
+        ];
+        let t2i: HashMap<String, usize> = HashMap::from([
+            ("A".to_string(), 0),
+            ("B".to_string(), 1),
+            ("C".to_string(), 2),
+            ("D".to_string(), 3),
+            ("E".to_string(), 4),
+        ]);
+        // A should be most similar to D
+        let source = "A";
+        let golden_target = "D";
+        let k = 2;
+        let similarity_object = Similarity::new(w, t2i);
+
+        let vec = match similarity_object.extract_vec_from_word(source) {
+            Ok(vec) => vec,
+            Err(e) => panic!("{}", e)
+        };
+
+        let similarities = match similarity_object.find_k_most_similar(&vec, k){
+            Ok(similarities) => similarities,
+            Err(e) => panic!("{}", e)
+        };
+        // source should be most similar to itself, then to D
+        assert_eq!(similarities.len(), k);
+        assert_eq!(similarities.get(0).unwrap().0.as_str(), source);
+        assert_eq!(similarities.get(1).unwrap().0.as_str(), golden_target);
+
+    }
+
+    #[test]
+    fn normalize_test() {
+
+        let golden: Array2<f32> = array![[2.0/3.0, 2.0/3.0, 1.0/3.0], [4.0/5.0, -3.0/5.0, 0.0]];
+        let mut w: Array2<f32> = array![[2.0,2.0,1.0], [4.0, -3.0, 0.0]];
+        Similarity::normalize(&mut w);
+        assert_eq!(golden, w);
+    }
 }
