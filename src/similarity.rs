@@ -1,14 +1,20 @@
 
+// imports
+use crate::config::files_handling;
+
 use std::{error::Error, ops::Range, collections::HashMap};
 use ndarray::{prelude::*, concatenate};
 use ndarray_stats::*;
 use rand::{thread_rng, seq::IteratorRandom};
 use plotters::{prelude::*, style::text_anchor::*};
 
-// this module has some check on trained vectors, functionallity to get
+
+
+// this module has functionallity on trained vectors:
 // the K most similar words to a given word.
 // the K most similar words to a combination of words.
 // plotting words to 2d (should be changed to PCA later)
+
 
 pub struct Similarity {
     w: Array2<f32>,
@@ -16,19 +22,14 @@ pub struct Similarity {
     i2t: HashMap<usize, String>
 }
 
-#[allow(dead_code)]
+
 impl Similarity {
 
     pub fn new(w: &mut Array2<f32>, t2i: HashMap<String, usize>) -> Similarity {
         
         // w is of shape (vocab_size, embedding_dim)
         // w entries are normalized to have a l2 norm of 1
-        for mut row in w.axis_iter_mut(Axis(0)) {
-            let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
-            row.mapv_inplace(|a| (a / norm).abs());
-        }
-        assert!(*w.max().expect("w is not between 0 and 1 after l2 norm") <= 1.0);
-        assert!(*w.min().expect("w is not between 0 and 1 after l2 norm") >= 0.0);
+        Similarity::normalize(w);
 
         // get the reverse map of t2i
         let mut i2t: HashMap<usize, String> = HashMap::new();
@@ -40,6 +41,29 @@ impl Similarity {
             w: w.clone(),
             t2i: t2i,
             i2t: i2t
+        }
+    }
+
+    fn normalize(w: &mut Array2<f32>) {
+        for mut row in w.axis_iter_mut(Axis(0)) {
+            let norm = row.mapv(|a| a.abs().powi(2)).sum().sqrt();
+            row.mapv_inplace(|a| (a / norm).abs());
+        }
+        assert!(*w.max().expect("w is not between 0 and 1 after l2 norm") <= 1.0);
+        assert!(*w.min().expect("w is not between 0 and 1 after l2 norm") >= 0.0);
+    }
+
+    pub fn read_weights(weight_path: &str) -> Array2<f32> {
+        match files_handling::read_input::<Array2<f32>>(weight_path) {
+            Ok(w) => w,
+            Err(e) => panic!("{}", e)
+        }
+    }
+
+    pub fn read_t2i(tokens_path: &str) -> HashMap<String, usize> {
+        match files_handling::read_input::<HashMap<String, usize>>(tokens_path) {
+            Ok(t2i) => t2i,
+            Err(e) => panic!("{}", e)
         }
     }
 
@@ -231,167 +255,4 @@ impl Similarity {
         Ok(sim_tokens)
     }
 
-}
-
-
-#[cfg(test)]
-mod tests {
-
-    use std::collections::HashMap;
-    use std::fs;
-    use ndarray::Array2;
-    use crate::config::files_handling;
-    use super::Similarity;
-    
-    // tests are currently not actual tests, but more printing of analogies between words that should make sense.
-
-    const WEIGHTS_PATH: &str = "Output/vecs";
-    const TOKENS_PATH: &str = "Output/words";
-
-    fn read_weights() -> Array2<f32> {
-        match files_handling::read_input::<Array2<f32>>(WEIGHTS_PATH) {
-            Ok(w) => w,
-            Err(e) => panic!("{}", e)
-        }
-    }
-
-    fn read_t2i() -> HashMap<String, usize> {
-        match files_handling::read_input::<HashMap<String, usize>>(TOKENS_PATH) {
-            Ok(t2i) => t2i,
-            Err(e) => panic!("{}", e)
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn analogies_test() {
-
-        // read weights and tokens
-        let mut w = read_weights();
-        let t2i = read_t2i();
-
-        // run similarity test
-        let sim_obj = Similarity::new(&mut w, t2i);
-        let k = 20; // find the 3 best analogies each time
-
-        // a is to b as like c is to ?
-        // translates to b - a + c : ?
-        // i.e : high is to higher as like good is to : better
-        let inputs = [
-            ["king", "queen", "man", "woman"],
-            ["go", "goes", "say", "says"],
-            ["going", "went", "spending", "spent"],
-            ["good", "better", "high", "higher"],
-            ["child", "children", "dollar", "dollars"],
-            ["his", "her", "boy", "girl"],
-            ["horse", "horses", "finger", "fingers"],
-            ["find", "finds", "eat", "eats"],
-            ["employees", "company", "officers", "police"],
-            ["after", "before", "big", "small"],
-            ["citizens", "president", "children", "parents"],
-            ["new", "old", "good", "bad"]
-        ];
-
-        for input in inputs {
-            
-            let source = [input[0], input[1], input[2]];
-            let target = input[3];
-            let analogies = match sim_obj.extract_analogies(source, k) {
-                Ok(analogies) => analogies,
-                Err(e) => panic!("{}", e)
-            };
-            for (i, (analogy, score)) in analogies.iter().enumerate() {
-                println!("{} : {} - {} + {} ? {} = {}", i, input[1], input[0], input[2], analogy, score);
-            }
-
-            println!("re-computation of the target, might have been found already...");
-            let analogy_vec = sim_obj.extract_analogy_vec(source).unwrap(); // safe, it was computed already before
-            match sim_obj.extract_vec_from_word(target) {
-                Ok(target_vec) => {
-                    let target_score = target_vec.dot(&analogy_vec);
-                    println!("{} = {}", target, target_score);
-                },
-                Err(_e) => {
-                    println!("supposed target {} is not in the vocabulray", target);
-                }
-            };
-        }
-
-
-    }
-
-    #[test]
-    #[ignore]
-    fn find_most_similar_test() {
-
-        // read weights and tokens
-        let mut w = read_weights();
-        let t2i = read_t2i();
-
-        // run similarity test
-        let sim_obj = Similarity::new(&mut w, t2i);
-        let tokens = ["sun", "student", "basketball", "tree", "singing", "drove", "pretty", "surprised"];
-        let k = 10;
-
-        for token in tokens {
-
-            println!("searching {} most similar words to {}", k, token);
-            let vec = match sim_obj.extract_vec_from_word(token) {
-                Ok(vec) => vec,
-                Err(e) => panic!("{}", e)
-            };
-
-            match sim_obj.find_k_most_similar(&vec, k) {
-                Ok(analogies) => {
-                    for (i, (analogy, score)) in analogies.iter().enumerate() {
-                        println!("{} : {} ? {} = {}", i, token, analogy, score);  
-                    }
-                }, 
-                Err(e) => panic!("{}", e)
-            };
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn plot_tokens_rand() {
-
-        // read weights and tokens
-        let mut w = read_weights();
-        let t2i = read_t2i();
-
-        // create output folder
-        let output_dir = "Img";
-        if let Err(e) = fs::create_dir_all(output_dir) { panic!("{}", e) }
-
-        // plot random token vectors on 2d plane
-        let sim_obj = Similarity::new(&mut w, t2i);
-        let saved_to = format!("{}/2d-rand.png", output_dir);
-        if let Err(e) = sim_obj.draw_tokens_2d(&saved_to, 100, None) {
-            panic!("{}", e);
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn plot_tokens_manual() {
-
-        // read weights and tokens
-        let mut w = read_weights();
-        let t2i = read_t2i();
-
-        // create output folder
-        let output_dir = "Img";
-        if let Err(e) = fs::create_dir_all(output_dir) { panic!("{}", e) }
-
-        // plot requested token vectors on 2d plane
-        let sim_obj = Similarity::new(&mut w, t2i);
-        let saved_to = format!("{}/2d-manual.png", output_dir);
-        let tokens = [
-            "girl", "boy", "new", "old", "young", "dog", "dogs", "hold", "holds", "woman", "man", "tall", "short"
-        ].iter().map(|x| x.to_string()).collect::<Vec<String>>();
-        if let Err(e) = sim_obj.draw_tokens_2d(&saved_to, 100, Some(tokens)) {
-            panic!("{}", e);
-        }
-    }
 }
