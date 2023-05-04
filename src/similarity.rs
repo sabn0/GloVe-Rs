@@ -67,6 +67,7 @@ impl Similarity {
         }
     }
 
+    #[allow(dead_code)]
     pub fn draw_tokens_2d(&self, save_to: &str, k: usize, use_tokens: Option<Vec<String>>) -> Result<(), Box<dyn Error>> {
       
         // this method draws tokens on a 2d plane and saves the img to save_to
@@ -171,6 +172,7 @@ impl Similarity {
 
     }
 
+    #[allow(dead_code)]
     fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
 
         // move from w second ax from embedding_dim to 2
@@ -234,6 +236,7 @@ impl Similarity {
     pub fn find_k_most_similar(&self, vec: &Array1<f32>, k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
 
         // given a vector of embedding_dim size, get the k most similar tokens to that vector and the scores
+        // done by cosine similarity
 
         assert!(k < self.w.dim().0, "k most be smaller than the vocabulary, but {} given", k);
 
