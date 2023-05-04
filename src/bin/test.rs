@@ -1,7 +1,9 @@
 
 use core::panic;
 use std::{error::Error, env, fs::File, io::{self, BufRead}};
+extern crate glove_trainer;
 use glove_trainer::Similarity;
+
 
 // this module has some check on trained vectors, functionallity to get
 // the K most similar words to a given word.
