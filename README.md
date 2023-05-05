@@ -144,7 +144,7 @@ bit in the future, potentially also allowing bigger slices.
 * If it would be of any need, I could upload this binary to crates.io.
 
 ## References
-* This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by <ins>Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014</ins>.
+* This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by <ins>Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014</ins>, [pdf](https://nlp.stanford.edu/pubs/glove.pdf).
 * I tested my implementation using the [WikiText-103](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/) dataset, by <ins>Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. 2016</ins>, [(paper)](https://arxiv.org/abs/1609.07843?ref=blog.salesforceairesearch.com).
 * I assisted with some nice details in the next posts that used python [1](http://www.foldl.me/2014/glove-python/), [2](https://towardsdatascience.com/a-comprehensive-python-implementation-of-glove-c94257c2813d).
 
