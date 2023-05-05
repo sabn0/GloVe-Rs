@@ -137,7 +137,6 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 </table>
 
 <br />
-
 ## Additional notes
 * I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons,
 the difference between x+e and x-e approximating the gradients vanished due to the 32bit precision. Maybe I will move to 64
