@@ -19,7 +19,7 @@ fn main() {
     // path to tokens (txt)
     // example: cargp run --bin a Input/analogies.txt Output/vecs.npy Output/words.txt
     let args: Vec<String> = env::args().collect();
-    if args.len() != 5 { panic!("input arguments 2, 3 should be path to npy followed by path to txt"); }
+    if args.len() != 5 { panic!("should have 4 argument to this test but found {}", args.len()-1); }
     let selector = &args[1];
     if !["a", "b"].contains(&selector.as_str()) { panic!("unrecognized pattern in first argument {}", &args[1]); }
 
