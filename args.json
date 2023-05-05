@@ -1,10 +1,6 @@
 {
 	"corpus_file": "/home/noam/Desktop/data/wiki103-tok100M.txt",
 	"output_dir": "Output",
-	"max_iter": 10,
-	"embedding_dim": 300,
-	"window_size": 10,
-	"batch_size": 32,
-	"vocab_size": 400000
+	"max_iter": 10
 }
 
