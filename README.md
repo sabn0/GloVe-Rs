@@ -5,23 +5,21 @@
 This is a 100% rust binary code to train a **GloVe** model based on the details in [GloVe's paper](https://aclanthology.org/D14-1162/). I implemented it to experiement with rust in the context of such an NLP model (and it's been great!). The training part is a 3 stage pipeline - (1) data preprocessing, (2) coocurrences counting, (3) training. In addition, I implemented some testing functionalities that enable inspection of word analogies and similarities with the model's output (trained word vectors).
 
  ## How to run
- After cloning the repo, build and run the main.rs binary in release:
+ After cloning the repo, build and run the *main.rs* binary in release:
  ```
  cargo build --release
 ./target/release/main args_example.json
  ```
- The main.rs binary expects a single argument, a json file. It will specify (at the minimum) two parameters: a txt file with corpus
- of sentences for training, and a location for output directory. 
+ The *main.rs* binary expects a single argument, a json file. The json should specify (at the minimum) two parameters: (1) a txt file with corpus of sentences for training. (2) a location for output directory. As follows:
  ```javascript
  {
- 	"corpus_file": "Input/some_sentences.txt",
-	"output_dir": "Output",
+    "corpus_file": "Input/some_sentences.txt",
+    "output_dir": "Output"
  }
  ```
-By specifying these minimal inputs, the program runs with its default parameters. It will save coocurrence counts to a tar zip,
-trained vector embeddings in a vec.npy file, and token-to-int dict to a txt file, all saved in the `output_dir` folder. 
-You can modify all or part of the following parameters by adding them to the json:
+By specifying these 2 arguments, the program will run with its default parameters on the `corpus_file`, and save the outputs to `output_dir`. The outputs are: (1) coocurrence counts in a tar.gz archive. (2) trained vector embeddings in a vec.npy file. (3) token-to-int dict in a txt file. You can modify the following parameters by adding them to the json:
 ```javascript
+{
     "window_size": positive integer
     "vocab_size": positive integer
     "max_iter": positive integer
@@ -33,6 +31,7 @@ You can modify all or part of the following parameters by adding them to the jso
     "num_threads_cooc": positive integer
     "num_threads_training": positive integer
     "saved_counts": boolean
+}
 ```
 `num_threads_cooc` specifies how many thread to use during coocurrence counting. `num_threads_training` is the training 
 equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this).
