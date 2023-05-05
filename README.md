@@ -137,18 +137,18 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 </table>
 
 ## Additional notes
-I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons,
+* I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons,
 the difference between x+e and x-e approximating the gradients vanished due to the 32bit precision. Maybe I will move to 64
 bit in the future, potentially also allowing bigger slices.
+* If it would be of any need, I could upload this binary to crates.io.
 
 ## References
 * This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014.
-* I got some inspiration by nice details in [this](https://towardsdatascience.com/a-comprehensive-python-implementation-of-glove-c94257c2813d) python post.
-* I tested after training using WikiText-103[].
+* I assisted with some nice details in the next posts that used python [1](http://www.foldl.me/2014/glove-python/), [2](https://towardsdatascience.com/a-comprehensive-python-implementation-of-glove-c94257c2813d).
+* I tested my implementation using the [WikiText-103](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/) dataset, by Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. 2016 [(paper)](https://arxiv.org/abs/1609.07843?ref=blog.salesforceairesearch.com).
 
-I could upload this binary to crates.io if needed.
-
-1.67.1 rust version
+## Software
+I used rust version 1.67.1, see Cargo.toml file for the used packages.
 
 ## License
 
