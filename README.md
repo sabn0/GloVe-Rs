@@ -77,27 +77,39 @@ I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceai
 
 I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
 
-The 5 most similar words to student :
+---
+The 5 most similar words to **student** :
 0 : student ? student = 0.99999994
 1 : student ? graduate = 0.8040225
 2 : student ? faculty = 0.78390074
 3 : student ? students = 0.77575016
 4 : student ? undergraduate = 0.72798145
 5 : student ? academic = 0.7142711
+---
 
-The 5 most similar words to singing : 
+---
+The 5 most similar words to **singing** : 
 0 : singing ? singing = 0.9999999
 1 : singing ? dancing = 0.8588408
 2 : singing ? sang = 0.8120471
 3 : singing ? sing = 0.80949867
 4 : singing ? performing = 0.7759678
 5 : singing ? madonna = 0.76943535
+---
 
+---
 king to queen is like man to ? : (excluding king, queen and man as possible answers)
-queen - king + man ? woman = 0.77241313
+0 : **queen - king + man ? woman** = 0.77241313
+1 : queen - king + man ? girl = 0.6918511
+2 : queen - king + man ? mother = 0.6108579
+---
 
+---
 go to goes is like say to says ? : (excluding go, goes and say as possible answers)
-goes - go + say ? says = 0.7782096
+0 : **goes - go + say ? says** = 0.7782096
+1 : goes - go + say ? knows = 0.71007967
+2 : goes - go + say ? everything = 0.70047474
+---
 
 ## Additional notes
 I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons
