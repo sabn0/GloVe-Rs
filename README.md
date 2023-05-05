@@ -37,7 +37,7 @@ By specifying these 2 arguments, the program will run with its default parameter
 equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this field).
 `saved_counts` should be set to true if the coocurrence part was already ran, and you only want to perform training based on a saved tar.gz of coocurrences.
 
-### Visualize some relations
+#### Visualize some relations
 The *test.rs* binary can be used to print some word similarities and analogies based on trained vectors. It expects 4 arguments:
 ```
 - selector              one char, a/b
@@ -59,12 +59,12 @@ For a word similarity examination, select b. In the input file, each line should
  ```
 
 ## Implementation details
-### Preprocessing
-Very simple, each line in the corpus file is stripped for leading and trailing spaces, then lower-cased, and wrapped with SOS and
+#### Preprocessing
+Very simple: Each line in the corpus file is stripped of leading and trailing spaces, then lower-cased, and wrapped with SOS and
 EOS tokens. Tokenization is done by spliting on spaces.
-### Coocurrence
-First counts the occurrences of all unique tokens, then creates a vocabulary using the requested vocab_size = N most common tokens, and finally counts cooccurrences between the vocabulary elements within the corpus, following GloVe's details. The coccurrences counting part is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing large vocabulary without memory issues. I set M to 30K, which represents a worst case of 900M entries of token and context pairs. Each portion is saved into an nd array, serialized and compressed. The output is one tar.gz with N / M files.
-### Training
+#### Coocurrence
+First counts the occurrences of all unique tokens. Then, creates a vocabulary using the requested vocab_size = N most common tokens. Finally, counts cooccurrences between the vocabulary elements in the corpus, following GloVe's details. Coccurrences counting is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing larger vocabularies without memory issues. I set M to 30K, which represents a worst case of 900M entries of token and context pairs. Each portion is saved into an nd array, serialized and compressed. The output is a single tar.gz that contains  N / M files.
+#### Training
 First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested batch_size. When done iterating, the trained weights are saved to a vecs.npy file in the output_dir location.
 
 ## Testing
