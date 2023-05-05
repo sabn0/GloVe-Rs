@@ -78,13 +78,13 @@ I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceai
 I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
 
 ---
-The 5 most similar words to **student** :
-0 : student ? student = 0.99999994
-1 : student ? graduate = 0.8040225
-2 : student ? faculty = 0.78390074
-3 : student ? students = 0.77575016
-4 : student ? undergraduate = 0.72798145
-5 : student ? academic = 0.7142711
+| The 5 most similar words to **student** |
+| 0 : student ? student = 0.99999994 |
+| 1 : student ? graduate = 0.8040225 |
+| 2 : student ? faculty = 0.78390074 | 
+| 3 : student ? students = 0.77575016 |
+| 4 : student ? undergraduate = 0.72798145 |
+| 5 : student ? academic = 0.7142711 |
 ---
 
 ---
