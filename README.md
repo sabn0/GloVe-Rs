@@ -136,12 +136,13 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 </tr>
 </table>
 
+<br />
+
 ## Additional notes
 * I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons,
 the difference between x+e and x-e approximating the gradients vanished due to the 32bit precision. Maybe I will move to 64
 bit in the future, potentially also allowing bigger slices.
 * If it would be of any need, I could upload this binary to crates.io.
-
 
 ## References
 * This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014.
