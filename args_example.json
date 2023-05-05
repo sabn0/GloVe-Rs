@@ -1,6 +1,5 @@
 {
-	"corpus_file": "/home/noam/Desktop/data/wiki103-tok100M.txt",
+	"corpus_file": "PATH_TO_INPUT_CORPUS, txt file",
 	"output_dir": "Output",
 	"max_iter": 10
 }
-
