@@ -4,7 +4,7 @@ use ndarray::Array2;
 use ndarray_npy::{read_npy, write_npy};
 use serde_json::Value;
 use std::{fs::{self, File}, error::Error, collections::HashMap, fmt::Display};
-use std::io::{prelude::*, {BufWriter, BufReader, IoSlice}};
+use std::io::prelude::*;
 use flate2::{Compression, read::GzDecoder};
 use flate2::write::GzEncoder;
 
@@ -190,6 +190,9 @@ impl Config {
 // Vec<Vec<u8>>             (coocs),
 pub mod files_handling {
 
+    use std::io::{BufWriter, IoSlice};
+
+    use tar::{Builder, Header, Archive};
     use super::*;
 
     // this method is called in order to read an input of type R from file_path for supported types
@@ -267,38 +270,18 @@ pub mod files_handling {
         type Error = Box<dyn Error>;
         type Item = Self;
         fn reaf_file(file_path: &str) -> Result<Self::Item, Self::Error> {
-            
-            //
-            // `read_all_vectored` is not yet available, manually looping throught input for now
-            //  this is the future implementation :
-            /*
-            let in_file = file_path.to_string() + ".gz";
-            let f = BufReader::new(File::open(in_file)?);
-            let mut reader = GzDecoder::new(f);
-    
-            let mut bufs: Vec<IoSliceMut> = Vec::new();
-            reader.read_vectored(&mut bufs)?;
-    
-            let items: Vec<Vec<u8>> = bufs.iter().map(|buf| {
-                buf.to_vec()
-            }).collect();
-            return Ok(items)
-            */
-            //
-            //
-    
+
+            let tar_path = format!("{}.tar.gz", file_path);
+            let tar_gz = File::open(tar_path)?;
+            let tar = GzDecoder::new(tar_gz);
+            let mut archive = Archive::new(tar);
+
             let mut items: Vec<Vec<u8>> = Vec::new();
-            let (main_dir, _) = file_path.rsplit_once("/").ok_or("invalid path file")?;
-            let paths = fs::read_dir(main_dir)?;
-            for path in paths {
-                let file_path = path?.path().display().to_string();
-                if file_path.ends_with(".gz") {
-                    let f = BufReader::new(File::open(file_path)?);
-                    let mut reader = GzDecoder::new(f);
-                    let mut buf: Vec<u8> = Vec::new();
-                    reader.read_to_end(&mut buf)?;
-                    items.push(buf);
-                }
+            for gz_file in archive.entries()? {
+                let mut gz_file = gz_file?;
+                let mut buf: Vec<u8> = Vec::new();
+                gz_file.read_to_end(&mut buf)?;
+                items.push(buf);
             }
     
             return Ok(items)
@@ -310,33 +293,23 @@ pub mod files_handling {
         type Error = Box<dyn Error>;
     
         fn save_file(&self, output_dir: &str, file_name: &str) -> Result<(), Self::Error> {
-            //
-            // `write_all_vectored` is not yet available, manually looping throught input for now
-            // this is the future implementation :
-            /*
-            let out = output_dir.to_string() + "/" + file_name + &format!("{}.gz", i);
-            let f = BufWriter::new(File::create(out)?);
-            let mut writer = ZlibEncoder::new(f, Compression::default());
-            let bufs: Vec<IoSlice> = self.iter().map( |serialized_np_arr| {
-                IoSlice::new(serialized_np_arr)
-            }).collect();
-            writer.write_vectored(&bufs)?;
-            Ok(())
-            */
-            //
-            //
+
+            let out_path = format!("{}/{}", output_dir, file_name);
+            let tar_gz = File::create(format!("{}.tar.gz", &out_path))?;
+            let enc = GzEncoder::new(tar_gz, Compression::default());
+            let mut tar_builder = Builder::new(enc);
+
             for (i, buf) in self.iter().enumerate() {
-    
-                let out = output_dir.to_string() + "/" + file_name + &format!("{}.gz", i);
-                let f = BufWriter::new(File::create(out)?);
-                let mut writer = GzEncoder::new(f, Compression::default());
-    
-                let slice = IoSlice::new(buf);
-                writer.write_all(&slice)?;
-                writer.flush()?;
-    
+
+                let mut header = Header::new_gnu();
+                header.set_path(format!("{}{}.gz", file_name, i))?;
+                header.set_size(buf.len() as u64);
+                header.set_cksum();
+                                
+                tar_builder.append(&mut header, buf.as_slice())?;
             }
-            
+
+            tar_builder.finish()?;  
             Ok(())
     
         }
