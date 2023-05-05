@@ -33,27 +33,26 @@ By specifying these 2 arguments, the program will run with its default parameter
     "saved_counts": boolean
 }
 ```
-`num_threads_cooc` specifies how many thread to use during coocurrence counting. `num_threads_training` is the training 
-equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this).
-`saved_counts` should be set to true if coocurrence part was already ran and you want only training based on saved files.
+`num_threads_cooc` specifies how many threads will be used during coocurrence counting. `num_threads_training` is the training 
+equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this field).
+`saved_counts` should be set to true if the coocurrence part was already ran, and you only want to perform training based on a saved tar.gz of coocurrences.
 
 ### Visualize some relations
-The test.rs binary can be used to print some word similarities and analogies based on a trained token embeddings. It expects 4 arguments:
+The *test.rs* binary can be used to print some word similarities and analogies based on trained vectors. It expects 4 arguments:
 ```
-    -- selector letter: one char, a/b
-    -- input file: txt file with inputs (see examples in the Input directoty)
-    -- trained embeddings: npy file (main.rs output)
-    -- tokens: txt file with token-to-int dict (main.rs output)
+- selector              one char, a/b
+- input file            txt file with inputs
+- trained vecs          npy file (main.rs output)
+- tokens                txt file with token-to-int dict (main.rs output)
 ```
 
-"a" is a word analogy test. In the input file, each line should have 4 tokens separated by space. The test will print the 10
-closest words (based on cosine distance) to the combination of the first 3 tokens in each line. For example, a line in the input file could be the well-known analogy: king queen man woman. An example to build and run:
+For a word analogy examination, select a. In the input file, each line should have 4 tokens separated by space (see examples in the Input directoty). The test will print the 10 closest words, based on cosine distance, to the combination of the first 3 tokens in each line. For example, a line in the input file could be the well-known analogy: *king queen man woman*. An example of how to build and run:
  ```
  cargo build
  cargo run --bin test a Input/analogies.txt Output/vecs.npy Output/words.txt
  ```
 
-"b" is a test for word similarites. In the input file, each line should have one single token. The test will print the 10 closest words to each anchor token (baed on cosine distance). An example to build and run:
+For a word similarity examination, select b. In the input file, each line should have one single token (see examples in the Input directoty). The test will print the 10 closest words to each token in the file, based on cosine distance. An example of how to build and run:
  ```
  cargo build
  cargo run --bin test b Input/sim_targets.txt Output/vecs.npy Output/words.txt
