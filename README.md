@@ -142,6 +142,7 @@ the difference between x+e and x-e approximating the gradients vanished due to t
 bit in the future, potentially also allowing bigger slices.
 * If it would be of any need, I could upload this binary to crates.io.
 
+
 ## References
 * This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014.
 * I assisted with some nice details in the next posts that used python [1](http://www.foldl.me/2014/glove-python/), [2](https://towardsdatascience.com/a-comprehensive-python-implementation-of-glove-c94257c2813d).
