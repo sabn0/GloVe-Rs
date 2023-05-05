@@ -150,7 +150,7 @@ bit in the future, potentially also allowing bigger slices.
 
 
 ## Software
-I used rust version 1.67.1, see Cargo.toml file for the used packages.
+I used rust version 1.67.1, see Cargo.toml file for the packages I used.
 
 ## License
 
