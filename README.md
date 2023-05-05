@@ -71,55 +71,81 @@ First loads the coocurrences from the tar back to M nd arrays, then runs trainin
 I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiemnt, running the entire training pipeline in release:
 
 | part | time | N threads | output weight |
-| ----------| -------- | ------  | -------- |
+| :--: |  :-------: | :-------: | :-------: |
 | **coocurrence** | ~ 4 minutes | 4 | tar.gz around 700MB |
 | **training**    | ~ 18 minutes per epoch |  1  |  npy around 275MB |
 
 I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
 
----
-| The 5 most similar words to **student** |
-| 0 : student ? student = 0.99999994 |
-| 1 : student ? graduate = 0.8040225 |
-| 2 : student ? faculty = 0.78390074 | 
-| 3 : student ? students = 0.77575016 |
-| 4 : student ? undergraduate = 0.72798145 |
-| 5 : student ? academic = 0.7142711 |
----
+<table>
+<tr>
+<th> The 5 most similar words to student </th>
+<th> The 5 most similar words to singing </th>
+</tr>
+<tr>
+<td>
 
----
-The 5 most similar words to **singing** : 
-0 : singing ? singing = 0.9999999
-1 : singing ? dancing = 0.8588408
-2 : singing ? sang = 0.8120471
-3 : singing ? sing = 0.80949867
-4 : singing ? performing = 0.7759678
-5 : singing ? madonna = 0.76943535
----
+| 0 | student | student | 0.99999994 |
+| :--: |  :-------: | :-------: | :-------: |
+| 1 | student | graduate | 0.8040225 |
+| 2 | student | faculty | 0.78390074 |
+| 3 | student | students | 0.77575016 |
+| 4 | student | undergraduate | 0.72798145 |
+| 5 | student | academic | 0.7142711 |
 
----
-king to queen is like man to ? : (excluding king, queen and man as possible answers)
-0 : **queen - king + man ? woman** = 0.77241313
-1 : queen - king + man ? girl = 0.6918511
-2 : queen - king + man ? mother = 0.6108579
----
+</td>
+<td>
 
----
-go to goes is like say to says ? : (excluding go, goes and say as possible answers)
-0 : **goes - go + say ? says** = 0.7782096
-1 : goes - go + say ? knows = 0.71007967
-2 : goes - go + say ? everything = 0.70047474
----
+| 0 | singing | singing | 0.9999999 |
+| :--: |  :-------: | :-------: | :-------: |
+| 1 | singing | dancing | 0.8588408 |
+| 2 | singing | sang | 0.8120471 |
+| 3 | singing | sing | 0.80949867 |
+| 4 | singing | performing | 0.7759678 |
+| 5 | singing | madonna | 0.76943535 |
+
+</td>
+</tr>
+
+<tr>
+<th> king to queen is like man to ? </th>
+<th> go to goes is like say to says ? </th>
+</tr>
+<tr>
+<td>
+
+| 0 | queen - king + man = woman | 0.77241313 |
+| :--: |  :-------: | :-------: |
+| 1 | queen - king + man = girl | 0.6918511 |
+| 2 | queen - king + man = mother | 0.6108579 |
+
+(excluding king, queen and man as possible answers)
+
+</td>
+<td>
+
+| 0 | goes - go + say = says | 0.7782096 |
+| :--: |  :-------: | :-------: |
+| 1 | goes - go + say = knows | 0.71007967 |
+| 2 | goes - go + say = everything | 0.70047474 |
+
+
+(excluding go, goes and say as possible answers)
+
+</td>
+</tr>
+</table>
 
 ## Additional notes
-I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons
-the difference between the x+e , x-e when approximating the gradients vanishes due to 32bit precision. Maybe I will move this to 64
+I consistently used 32 bit variables in the implementation. Using a numerical gradient check I discovered that for low epsilons,
+the difference between x+e and x-e approximating the gradients vanished due to the 32bit precision. Maybe I will move to 64
 bit in the future, potentially also allowing bigger slices.
 
 ## References
-This is a rust implementation of the architecture described in the paper GloVe[].
-I got some inspiration by nice ideas in this[] python implementation.
-I tested after training using WikiText-103[].
+* This is a rust implementation of the architecture described in the paper [GloVe](https://aclanthology.org/D14-1162/), by Jeffrey Pennington, Richard Socher, and Christopher D. Manning. 2014.
+* I got some inspiration by nice details in [this](https://towardsdatascience.com/a-comprehensive-python-implementation-of-glove-c94257c2813d) python post.
+* I tested after training using WikiText-103[].
+
 I could upload this binary to crates.io if needed.
 
 1.67.1 rust version
