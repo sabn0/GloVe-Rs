@@ -2,16 +2,13 @@
 
 ![example workflow](https://github.com/Sabn0/GloVe-Rs/actions/workflows/rust.yml/badge.svg)
 
-This is a 100% rust binary code to train a GloVe model based on the details in GloVe's paper [].
-Written to experiement, and get some impression of how to implement such an NLP model in rust.
-The training part is a three stage pipeline - data preprocessing, coocurrences counting, training.
-Testing enables some inspection of word analogies given trained word vectors.
+This is a 100% rust binary code to train a **GloVe** model based on the details in [GloVe's paper](https://aclanthology.org/D14-1162/). I implemented it to experiement with rust in the context of such an NLP model (and it's been great!). The training part is a 3 stage pipeline - (1) data preprocessing, (2) coocurrences counting, (3) training. In addition, I implemented some testing functionalities that enable inspection of word analogies and similarities with the model's output (trained word vectors).
 
  ## How to run
  After cloning the repo, build and run the main.rs binary in release:
  ```
  cargo build --release
-./target/release/main args.json
+./target/release/main args_example.json
  ```
  The main.rs binary expects a single argument, a json file. It will specify (at the minimum) two parameters: a txt file with corpus
  of sentences for training, and a location for output directory. 
