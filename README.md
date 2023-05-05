@@ -68,10 +68,14 @@ First counts the occurrences of all unique tokens. Then, creates a vocabulary us
 First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested batch_size. When done iterating, the trained weights are saved to a vecs.npy file in the output_dir location.
 
 ## Testing
-I tested the code using WikiText-103 dataset []. 
-After removing headlines and empty lines it has ~100M tokens, which translated to a vocabulary of ~230K tokens when split by spaces. 
-Running in release, Coocurrence counting took ~4 minutes using 4 threads. The output tar weighted about 700MB. I then trained for 10 epochs, each epoch took ~18 minutes using a single thread. The output npy weighted about 275MB.
-I did not run a full word analogy test after training, but I did inspect some general inputs for sanity. For example I got: 
+I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiemnt, running the entire training pipeline in release:
+
+| part | time | N threads | output weight |
+| ----------| -------- | ------  | -------- |
+| **coocurrence** | ~ 4 minutes | 4 | tar.gz around 700MB |
+| **training**    | ~ 18 minutes per epoch |  1  |  npy around 275MB |
+
+I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
 
 The 5 most similar words to student :
 0 : student ? student = 0.99999994
@@ -105,6 +109,8 @@ This is a rust implementation of the architecture described in the paper GloVe[]
 I got some inspiration by nice ideas in this[] python implementation.
 I tested after training using WikiText-103[].
 I could upload this binary to crates.io if needed.
+
+1.67.1 rust version
 
 ## License
 
