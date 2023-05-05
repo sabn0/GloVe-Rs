@@ -190,8 +190,6 @@ impl Config {
 // Vec<Vec<u8>>             (coocs),
 pub mod files_handling {
 
-    use std::io::{BufWriter, IoSlice};
-
     use tar::{Builder, Header, Archive};
     use super::*;
 
