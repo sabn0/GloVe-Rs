@@ -151,7 +151,7 @@ bit in the future, potentially also allowing bigger slices.
 
 
 ## Software
-I used rust version 1.67.1, see Cargo.toml file for the packages I used.
+Rust version 1.67.1, see Cargo.toml file for the packages I used.
 
 ## License
-
+Under [MIT license](https://github.com/Sabn0/GloVe-Rs/blob/main/LICENSE-MIT) and [Apache License, Version 2.0](https://github.com/Sabn0/GloVe-Rs/blob/main/LICENSE-APACHE).
