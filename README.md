@@ -64,19 +64,19 @@ For a word similarity examination, select b. In the input file, each line should
 Very simple: Each line in the corpus file is stripped of leading and trailing spaces, then lower-cased, and wrapped with SOS and
 EOS tokens. Tokenization is done by spliting on spaces.
 #### Coocurrence
-First counts the occurrences of all unique tokens. Then, creates a vocabulary using the requested vocab_size = N most common tokens. Finally, counts cooccurrences between the vocabulary elements in the corpus, following GloVe's details. Coccurrences counting is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing larger vocabularies without memory issues. I set M to 30K, which represents a worst case of 900M entries of token and context pairs. Each portion is saved into an nd array, serialized and compressed. The output is a single tar.gz that contains  N / M files.
+First counts the occurrences of all unique tokens. Then, creates a vocabulary using the requested `vocab_size` = N most common tokens. Finally, counts cooccurrences between the vocabulary elements in the corpus, following GloVe's details. Coccurrences counting is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing larger vocabularies without memory issues. I set M to 30K, which represents a worst case of 900M entries of token and context pairs. Each portion is saved into an nd array, serialized and compressed. The output is a single tar.gz that contains  N / M files.
 #### Training
-First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested batch_size. When done iterating, the trained weights are saved to a vecs.npy file in the output_dir location.
+First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested `batch_size`. When done iterating, the trained weights are saved to a vecs.npy file in the `output_dir` location.
 
 ## Testing
-I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiemnt, running the entire training pipeline in release:
+I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiement, running the entire training pipeline in release:
 
 | part | time | N threads | output weight |
 | :--: |  :-------: | :-------: | :-------: |
 | **coocurrence** | ~ 4 minutes | 4 | tar.gz around 700MB |
 | **training**    | ~ 18 minutes per epoch |  1  |  npy around 275MB |
 
-I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
+I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some examples I got:
 
 <table>
 <tr>
@@ -110,7 +110,7 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 
 <tr>
 <th> king to queen is like man to ? </th>
-<th> go to goes is like say to says ? </th>
+<th> go to goes is like say to ? </th>
 </tr>
 <tr>
 <td>
