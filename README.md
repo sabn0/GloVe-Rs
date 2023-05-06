@@ -76,7 +76,7 @@ I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceai
 | **coocurrence** | ~ 4 minutes | 4 | tar.gz around 700MB |
 | **training**    | ~ 18 minutes per epoch |  1  |  npy around 275MB |
 
-I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some example I got:
+I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some examples I got:
 
 <table>
 <tr>
