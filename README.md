@@ -110,7 +110,7 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 
 <tr>
 <th> king to queen is like man to ? </th>
-<th> go to goes is like say to says ? </th>
+<th> go to goes is like say to ? </th>
 </tr>
 <tr>
 <td>
