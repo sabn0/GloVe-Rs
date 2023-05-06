@@ -2,11 +2,9 @@
 // imports
 use crate::config::files_handling;
 
-use std::{error::Error, ops::Range, collections::HashMap};
-use ndarray::{prelude::*, concatenate};
-use ndarray_stats::*;
-use rand::{thread_rng, seq::IteratorRandom};
-use plotters::{prelude::*, style::text_anchor::*};
+use std::{error::Error, collections::HashMap};
+use ndarray::prelude::*;
+
 
 // this module has functionallity on trained vectors:
 // the K most similar words to a given word.
@@ -63,143 +61,6 @@ impl Similarity {
             Err(e) => panic!("{}", e)
         }
     }
-
-    #[allow(dead_code)]
-    pub fn draw_tokens_2d(&self, save_to: &str, k: usize, use_tokens: Option<Vec<String>>) -> Result<(), Box<dyn Error>> {
-      
-        // this method draws tokens on a 2d plane and saves the img to save_to
-        // the k tokens can be sampled randomly, or m tokens can be given by the user.
-
-        // Instead of implementating a PCA I am going to plot on the x axis the mean of the vectors
-        // and on the y axis the max of the vectors. SHould be changed sometime.
-
-        const MARGIN: u32 = 15;
-        const FONT_STYLE: (&str, i32) = ("sans-serif", 20);
-
-        let (tokens, sliced_w) = match use_tokens {
-            Some(use_tokens) => {
-                let indices = use_tokens.iter().map(|t| self.t2i.get(t)
-                .expect(format!("requested token {} not in vocabulary", t).as_str()).to_owned())
-                .collect::<Vec<usize>>();
-                self.slice_weights(k, Some(indices))?
-            },
-            None => {
-                self.slice_weights(k, None)?
-            }
-        };
-
-        // get plotting data, projection should be of shape (k, 2)
-        let (projections, axes) = self.get_2dim_projections(&sliced_w)?;
-
-        let root_area = BitMapBackend::new(save_to, (640, 640)).into_drawing_area();
-        root_area.fill(&WHITE)?;
-
-        // weights are normalized thus values between 0 and 1
-        let x_spec: Range<f32> = Range{start: axes[0], end: axes[1]};
-        let y_spec: Range<f32> = Range{start: axes[2], end: axes[3]};
-
-        let mut chart = ChartBuilder::on(&root_area)
-        .margin(MARGIN)
-        .x_label_area_size(10)
-        .y_label_area_size(50)
-        .build_cartesian_2d(x_spec, y_spec)?;
-
-        chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .disable_y_mesh()
-        .disable_x_axis()
-        .disable_y_axis()
-        .draw()?;
-
-        let text_style = TextStyle::from(FONT_STYLE)
-        .transform(FontTransform::None)
-        .font.into_font().style(FontStyle::Bold)
-        .with_color(&BLACK)
-        .with_anchor::<RGBColor>(Pos::new(HPos::Center, VPos::Center))
-        .into_text_style(chart.plotting_area());
-
-        // a closure for token label and position on the 2d plane
-        let position_and_word = |x: f32, y: f32, token: String| {
-            return EmptyElement::at((x,y))
-                + Circle::new((0, 0), 3, ShapeStyle::from(&BLACK).filled())
-                + Text::new(
-                    token,
-                    (0, 10),
-                    &text_style,
-                );
-        };
-
-        // draw every token on the canves
-        for i in 0..tokens.len() {
-            let token = tokens.get(i).unwrap().to_string(); // safe, tokens is the enumerator
-            // positions should be of shape (2,), from (k, 2)
-            let positions: Array1<f32> = projections.slice(s![i, ..]).to_owned();
-            assert_eq!(positions.dim(), 2);
-            chart.plotting_area().draw(&position_and_word(positions[0], positions[1], token))?;
-        }
-
-        chart.plotting_area().present()?;
-        Ok(())
-
-    }
-
-    #[allow(dead_code)]
-    fn slice_weights(&self, k: usize, indices: Option<Vec<usize>>) -> Result<(Vec<String>, Array2<f32>), Box<dyn Error>> {
-
-        // get w and tokens sliced on the requested tokens only
-
-        assert_eq!(self.w.dim().0, self.t2i.len(), "inconsistent number of entries in w and tokens");
-        assert!(k > 0, "k most be positive");
-
-        let indices = match indices {
-            Some(indices) => indices,
-            None => (0..self.t2i.len()).choose_multiple(&mut thread_rng(), k)
-        };
-        
-        // slice w and tokens ( this should maintain order )
-        let sliced_w: Array2<f32> = self.w.select(Axis(0), &indices);
-        let tokens: Vec<String> = indices.iter().map(|i| {
-            self.i2t.get(i)
-            .expect(format!("did not find token that matches index {}", i).as_str())
-            .to_string()
-        }).collect();
-
-        assert_eq!(tokens.len(), sliced_w.dim().0);
-        return Ok((tokens, sliced_w))
-
-    }
-
-    #[allow(dead_code)]
-    fn get_2dim_projections(&self, w: &Array2<f32>) -> Result<(Array2<f32>, [f32; 4]), Box<dyn Error>> {
-
-        // move from w second ax from embedding_dim to 2
-        // corrently computed as the mean and max of the values, but should be replaced with PCA... 
-
-        // w is of shape (k, embedding_dim), should return a slice (k, 2) with the max and mean values
-        let (k, _) = &w.dim();
-
-        // means and maxs should be of shape (k, 1)
-        let means: Array2<f32> = w.mean_axis(Axis(1)).ok_or("problem in mean")?.to_shape((*k, 1usize))?.to_owned();
-        let maxs: Array2<f32> = w.map_axis(Axis(1), |v| { 
-            *v.iter()
-            .max_by(|x, y| x.partial_cmp(y)
-            .expect("problem in get_2dim_projections"))
-            .expect("problem in get_2dim_projections")
-        }).to_shape((*k, 1usize))?.to_owned();
-
-        // get min and max values for axes
-        let x_max = *means.max()?;
-        let x_min = *means.min()?;
-        let y_max = *maxs.max()?;
-        let y_min = *maxs.min()?;
-
-        // create slice (k, 2)
-        let projections: Array2<f32>  = concatenate![Axis(1), means, maxs];
-        let epsi = 0.00;
-        Ok((projections, [x_min-epsi, x_max+epsi, y_min-epsi, y_max+epsi]))
-    }
-
 
     pub fn extract_analogy_vec(&self, inputs: [&str; 3]) -> Result<Array1<f32>, Box<dyn Error>> {
 
