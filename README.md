@@ -69,7 +69,7 @@ First counts the occurrences of all unique tokens. Then, creates a vocabulary us
 First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested `batch_size`. When done iterating, the trained weights are saved to a vecs.npy file in the `output_dir` location.
 
 ## Testing
-I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiemnt, running the entire training pipeline in release:
+I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiement, running the entire training pipeline in release:
 
 | part | time | N threads | output weight |
 | :--: |  :-------: | :-------: | :-------: |
