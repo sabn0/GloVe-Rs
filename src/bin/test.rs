@@ -16,7 +16,7 @@ fn main() {
     // path to input based on selector (quads or singles) 
     // path to trained vecs (npy)
     // path to tokens (txt)
-    // example: cargp run --bin a Input/analogies.txt Output/vecs.npy Output/words.txt
+    // example: cargo run --bin a Input/analogies.txt Output/vecs.npy Output/words.txt
     let args: Vec<String> = env::args().collect();
     if args.len() != 5 { panic!("should have 4 argument to this test but found {}", args.len()-1); }
     let selector = &args[1];
