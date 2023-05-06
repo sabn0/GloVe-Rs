@@ -8,7 +8,7 @@ use std::io::prelude::*;
 use flate2::{Compression, read::GzDecoder};
 use flate2::write::GzEncoder;
 
-// wrapper around parameters for the program (cocc and train)
+// wrapper around parameters for the program (cooccurrences and train)
 #[derive(Clone, Debug)]
 pub struct JsonTypes {
     pub corpus_file: String,
@@ -187,7 +187,7 @@ impl Config {
 // currently supporting 
 // HashMap<String, usize>   (tokens),
 // Array2<f32>              (vecs)
-// Vec<Vec<u8>>             (coocs),
+// Vec<Vec<u8>>             (cooccurrences),
 pub mod files_handling {
 
     use tar::{Builder, Header, Archive};
@@ -263,7 +263,7 @@ pub mod files_handling {
             Ok(())
         }    
     }
-    // cooc counts are unzipped with this implementation
+    // cooccurrences counts are unzipped with this implementation
     impl ReadFile for Vec<Vec<u8>> {
         type Error = Box<dyn Error>;
         type Item = Self;
@@ -286,7 +286,7 @@ pub mod files_handling {
     
         }
     }
-    // cooc counts are zipped with this implementation
+    // cooccurrences counts are zipped with this implementation
     impl SaveFile for Vec<Vec<u8>> {
         type Error = Box<dyn Error>;
     

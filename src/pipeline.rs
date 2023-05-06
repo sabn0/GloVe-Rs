@@ -15,9 +15,9 @@ pub struct Pipeline {}
 
 impl Pipeline {
 
-    // run main procedure of 3 steps -
+    // runs the main procedure of 3 steps -
     // -> configuration of arguments
-    // -> coocurrence counting
+    // -> cooccurrences counting
     // -> training
 
     pub fn run() {
@@ -31,7 +31,7 @@ impl Pipeline {
             Err(e) => panic!("{}", e)
         };
 
-        // run the co-occurences count stage if not saved and given already
+        // run the cooccurrences count stage if not saved and given already
         if params.saved_counts.is_none() || params.saved_counts.unwrap() == false {
 
             let timer = Instant::now();
@@ -50,7 +50,7 @@ impl Pipeline {
         let timer = Instant::now();
         println!("starting training part...");
 
-        // the co-ocurences were saved in parts or given as input, load them
+        // the cooccurrences were saved in parts or given as input, load them
         let cooc_path = (&params.output_dir).to_string() + "/cooc";
         let slices: Vec<Array2<f32>> = match files_handling::read_input::<Vec<Vec<u8>>>(&cooc_path) {
             Ok(slices) => {
@@ -62,7 +62,7 @@ impl Pipeline {
         };
 
         // train (and save trained weights) 
-        println!("loaded {} chunks of cooc", &slices.len());
+        println!("loaded {} chunks of cooccurrences", &slices.len());
         if let Err(e) = Train::run(slices, &params.json_train, &params.output_dir) {
             panic!("{}", e)
         };

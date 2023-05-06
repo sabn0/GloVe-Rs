@@ -43,7 +43,7 @@ impl Counts {
         let sequence = Counts::parse_line(line, use_os);
         let split_sequence = Counts::tokenize(&sequence);
 
-        // accumulate occurences of words - how many times each tokens appears in the corpus
+        // accumulate occurrences of words - how many times each token appears in the corpus
         for tok in &split_sequence {
             let val = token2count.entry(tok.to_owned()).or_insert(0);
             *val += 1;
@@ -68,7 +68,7 @@ impl Counts {
         
         // this method populates the empty hash 't2i` with the vocab_size most common tokens found in token2count
         // it is done by sorting `token2count` by value, and taking the K first entries
-        // the K entries are shuffled in order - this is important for cooc counting that will be done later, to have
+        // the K entries are shuffled in order - this is important for cooccurrences counting that will be done later, to have
         // slices (threads) that match in capacity.
 
         let mut tup = token2count
@@ -98,7 +98,7 @@ impl Counts {
         slice: &Range<usize>, 
         thread_i: Option<usize>) -> Result<(), Box<dyn Error>> {
 
-            // this method count co-occurerences of tokens in the vocabulary based on the GloVe algorithm.
+            // this method counts cooccurrences of tokens in the vocabulary based on the GloVe algorithm.
             // it populates `tup2count` by the counts of the items in `t2i` in `sequences`, using the given
             // window_size. Entries of the usize numbers that match the word strings.
             //
@@ -154,7 +154,7 @@ impl Counts {
 
     fn map_to_ndarray(tup2cooc: &HashMap<(usize, usize), f32>, nd_array: &mut Array2<f32>) {
         // move from a hashmap to nd array before enconding and zipping, this is done to
-        // make things easier when training + turned out to be more space efficient.
+        // make things easier for training + turned out to be more space efficient.
         for (i, (k, v)) in tup2cooc.iter().enumerate() {
             let line: Array1<f32> = array![k.0 as f32, k.1 as f32, *v];
             nd_array.slice_mut(s![i, ..]).assign(&line);
@@ -186,7 +186,7 @@ impl Counts {
 
     pub fn run(params: &JsonTypes) -> Result<(), Box<dyn Error>> {
 
-        // run the procedure of coocurrence counting before training. 
+        // runs the procedure of cooccurrences counting before training. 
         // done by creating the vocabulary of most common words in the vocabulary, and counting 
         // the occurrences of every pair based on the GloVe algorithm.
 
@@ -213,13 +213,13 @@ impl Counts {
         Counts::build_vocab(token2count, vocab_size, &mut t2i, use_shuffle);
 
 
-        // count co-occurences
+        // count cooccurrences
         // counting is done in parts (each slice to thread) to enable large vocabulary without allocation failure
-        // each count is saved for one zip (will be changed to one universal zip later).
+        // each count is saved in one zip.
         // `in_parts_size` defines the number of pivot tokens handled in each slice. this number is set to 30K since the
-        // number of potential pairs is in the worst case `in_parts_size` ** 2, which brings to almost 1M. The dictionary
+        // number of potential pairs is in the worst case `in_parts_size` ** 2, which brings to almost 1B. The dictionary
         // holds three primitive variables, all together nearing the 32bit capacity. In reallity, much of the entries are
-        // empty, so this number could be increased for larger vocabulries.
+        // empty, so this number could be increased.
         let in_parts_size: usize = 30000;
         let slices: Vec<Range<usize>> = (0..t2i.len()).step_by(in_parts_size).map(|i| i..i+in_parts_size).collect();
         ThreadPoolBuilder::new().num_threads(params.num_threads_cooc).build_global()?;
@@ -246,7 +246,7 @@ trait Tokenizer {
 }
 
 impl Tokenizer for Counts {
-    // simple tokenizer by split
+    // simple tokenizer by split space
     fn tokenize(sequence: &str) -> Vec<String> {
         return sequence.split(' ').map(|x| x.to_string()).collect();
     }
@@ -260,7 +260,7 @@ mod tests {
     use super::Counts;
 
     // the test checks the performance of the implementation in counting joined occurrences of pairs with respect
-    // to a golden example that I computed. This is a small toy example since coming up with larger examples is 
+    // to a golden example that I computed. This is a small toy example since coming up with a larger example is 
     // cumbersome manully.
 
     #[test]
@@ -288,8 +288,6 @@ mod tests {
         tup2count_golden.insert((1 ,2), 1.0 / 10.0 + 1.0 / 2.0);
         tup2count_golden.insert((2 ,0), 1.0 / 7.0);
         tup2count_golden.insert((2 ,1), 1.0 / 8.0);
-
-        //
 
         // run algorithm result
         let mut token2count_alg = HashMap::new();

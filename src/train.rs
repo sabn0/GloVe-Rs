@@ -37,7 +37,7 @@ impl Train {
             w_context: Array::random((vocab_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32,
             b_tokens: Array::random((vocab_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32,
             b_context: Array::random((vocab_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32,
-            ag_w_tok: Array2::from_elem((vocab_size, embedding_dim), 1.0), // init to 1.0 makes the initial eta equal to inital learning rate
+            ag_w_tok: Array2::from_elem((vocab_size, embedding_dim), 1.0), // init to 1.0 makes the initial eta = inital learning rate
             ag_w_context: Array2::from_elem((vocab_size, embedding_dim), 1.0),
             ag_b_tok: Array2::from_elem((vocab_size, 1), 1.0),
             ag_b_context: Array2::from_elem((vocab_size, 1), 1.0)
@@ -191,9 +191,9 @@ impl Train {
 
                 let (local_batch_loss, [dl_dw_tok, dl_dw_context, dl_db_tok, dl_db_context]): (Array2<f32>, [Array2<f32>; 4]) = Train::compute_loss_and_grads(&xs, x_max, alpha, this_batch, &weights)?;
                 
-                // I am using a mean over the batch since if I would some over all examples, epoch_loss & total_loss
+                // I am using a mean over the batch since if I would sum over all examples, epoch_loss & total_loss
                 // would (in the worst case) have to hold a size that can be above 32bit. By using batch_size avg,
-                // this number is bounded to total_examples / batch_size. Hoever, i am not enforcing batch_size > some k
+                // this number is bounded to total_examples / batch_size. However, i am not enforcing batch_size > some k
                 let local_loss = local_batch_loss.mean().ok_or("problem in loss calculation")?;
                 *epoch_loss += local_loss;
                 *total_loss += 1.0;
@@ -234,9 +234,9 @@ impl Train {
 
     fn train(&mut self, x_mat: Vec<Array2<f32>>, train_params: &JsonTrain) -> Result<(), Box<dyn Error>> {
 
-        // this method runs the training process over the entrie coocs corpus, given in x_mat by slices
-        // in runs the slices in turnes for N epochs. Currently not allowing multiple threads (since locks are needed).
-        // slices are shuffled in order, and also within them (random inner order).
+        // this method runs the training process over the entrie coocs corpus, given in x_mat by slices.
+        // It runs the slices in turnes for N epochs. Currently not allowing multiple threads (since locks are needed).
+        // slices are shuffled in order, and also within themselves (random inner order).
 
         let mut progress_params = DisplayProgress::new();
         progress_params.set_n_slices(x_mat.len());
@@ -248,7 +248,7 @@ impl Train {
             progress_params.init_epoch_loss();
             progress_params.init_total_loss();
 
-            // for each epoch - > shuffle the slices order
+            // for each epoch -> shuffle the slices order
             let mut slices_order = (0..progress_params.n_slices).into_iter().collect::<Vec<usize>>();
             slices_order.shuffle(&mut thread_rng());
 
@@ -393,10 +393,10 @@ mod tests {
             let batch_size = input.len();
             let x_max = 100.0;
             let alpha = 0.75;
-            let epsilon = 0.01; // f64 vs f32
+            let epsilon = 0.01;
             assert_eq!(1, batch_size);
 
-            // weights are initalized as they are in Train::new()
+            // weights are initalized as they would in Train::new()
             let x = Array2::from_shape_vec((batch_size, 1), input).unwrap();
             let w_i = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
             let w_j = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
@@ -410,7 +410,7 @@ mod tests {
                 Err(e) => panic!("{}", e)
             };
 
-            // compute aprroximation of gradients based on forawrd of w+epsilon and forward of w-epsilon
+            // compute aprroximation of gradients based on forward of w+epsilon and forward of w-epsilon
             let mut weights_copy: Vec<Array2<f32>> = weights.clone();
             for (i, weight) in weights.iter().enumerate() {
 

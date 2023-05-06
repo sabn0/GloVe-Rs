@@ -9,7 +9,6 @@ use ndarray::prelude::*;
 // this module has functionallity on trained vectors:
 // the K most similar words to a given word.
 // the K most similar words to a combination of words.
-// plotting words to 2d (should be changed to PCA later)
 pub struct Similarity {
     w: Array2<f32>,
     t2i: HashMap<String, usize>,
@@ -66,8 +65,8 @@ impl Similarity {
 
         // given 3 strings of tokens, compute the analogy linear combination of their vectors.
 
-        // by input order should be 0 = -, 1 = +, 2 = +
-        // put (-) of the first item
+        // input order should be 0 = -, 1 = +, 2 = +
+        // put (-) on the first item
         let mut sum_analogy: Array1<f32> = -1.0 * self.extract_vec_from_word(inputs[0])?;
         for i in 1..inputs.len() { // add 1 and 2 to sum
             sum_analogy += &self.extract_vec_from_word(inputs[i])?;
@@ -81,7 +80,7 @@ impl Similarity {
 
     pub fn extract_analogies(&self, inputs: [&str; 3], k: usize) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
         
-        // get the k most similar words (and sim - scores) to the linear combination of inputs 
+        // get the k most similar words (and scores) to the linear combination of inputs 
         let analogy = self.extract_analogy_vec(inputs)?;
         let best_analogies = self.find_k_most_similar(&analogy, k)?;
         Ok(best_analogies)

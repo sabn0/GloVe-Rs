@@ -4,11 +4,10 @@ use std::{error::Error, env, fs::File, io::{self, BufRead}};
 use glove_trainer::Similarity;
 
 
-// this module has some check on trained vectors, functionallity to get
+// this module has some checks on trained vectors, functionality to get:
 // the K most similar words to a given word.
 // the K most similar words to a combination of words.
-// plotting words to 2d (should be changed to PCA later)
-// treated as binary executable so it can be ran independantly from main
+// treated as binary executable so it can be ran independantly of main
 
 fn main() {
 
@@ -71,12 +70,12 @@ fn main() {
 
 fn run_analogies(inputs: &Vec<Vec<String>>, k: usize, similarity_object: Similarity) -> Result<(), Box<dyn Error>> {
 
-    // each element in inputs is an iterator over 4 strings, the object is to find the analogy 
+    // each element in inputs is a vector of 4 strings, the object is to find the analogy 
     // of the combination of the first 3, in hope that it would match 4.
     // i.e
     // a is to b as like c is to ?
     // translates to b - a + c : ?
-    // i.e : high is to higher as like good is to : better
+    // i.e : high is to higher as like good is to : ? better
 
     for input in inputs {
 
