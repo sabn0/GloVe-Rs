@@ -1,5 +1,5 @@
 {
-	"corpus_file": "PATH_TO_INPUT_CORPUS, txt file",
+	"corpus_file": "Input/some_sentences.txt",
 	"output_dir": "Output",
 	"max_iter": 10
 }
