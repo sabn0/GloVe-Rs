@@ -116,8 +116,11 @@ impl Train {
          let slice_enumeration = progress_params.slice_enumeration;
          let current_slice = progress_params.current_slice;
          let slice_n_examples = *progress_params.total_examples.get(current_slice).unwrap() as f32;
-         println!("in slice {} / {}, number of total examples here: {}", slice_enumeration, n_slices, slice_n_examples);
-
+         
+         if verbose {
+            println!("in slice {} / {}, number of total examples here: {}", slice_enumeration, n_slices, slice_n_examples);
+         }
+         
          // shuffle the inner order of examples within the slice
          let slice_len = slice_arr.dim().0;
          let mut in_slice_order = (0..slice_len).into_iter().collect::<Vec<usize>>();

@@ -220,15 +220,20 @@ impl Counts {
         let mut t2i: HashMap<String, usize> = HashMap::new();
         Counts::build_vocab(token2count, vocab_size, &mut t2i, use_shuffle);
 
-
         // count cooccurrences
         // counting is done in parts (each slice to thread) to enable large vocabulary without allocation failure
         // each count is saved in one zip.
-        // `in_parts_size` defines the number of pivot tokens handled in each slice. this number is set to 30K since the
-        // number of potential pairs is in the worst case `in_parts_size` ** 2, which brings to almost 1B. The dictionary
-        // holds three primitive variables, all together nearing the 32bit capacity. In reallity, much of the entries are
-        // empty, so this number could be increased.
-        let in_parts_size: usize = 30000;
+
+        // For a 2^31 - 1 bit platform, let x be the maximal number of tokens that can be held as pivots in a slice:
+        // We then need to find the maximal 'x' such that 2*3*(x**2) < 2^31 -1
+
+        // The reason is every token can occure with every other token in the worst case. In addition, every token-context
+        // pair make an example of 3 variables (2 indexes and count). Plus, when we will load these arrays they will need
+        // to be duplicated for the symmetric part (make a context-token from every token-context). So that's 2*3*(x**2)
+        
+        // solving for x => 18,918, so I set `in_parts_size` to be 18k
+        // In reallity, much of the entries are empty, so this number could be increased for known datasets.
+        let in_parts_size: usize = 18000;
         let slices: Vec<Range<usize>> = (0..t2i.len()).step_by(in_parts_size).map(|i| i..i+in_parts_size).collect();
         ThreadPoolBuilder::new().num_threads(params.num_threads_cooc).build_global()?;
         let counts_by_slices: Vec<Vec<u8>> = slices.par_iter().enumerate().map( |(thread_i, slice)| {
