@@ -9,9 +9,6 @@ use ndarray_rand::rand::seq::SliceRandom;
 use ndarray_stats::QuantileExt;
 use rand::thread_rng;
 use std::error::Error;
-use std::iter::zip;
-use std::ops::{SubAssign, AddAssign};
-use std::slice::Chunks;
 use std::time::Instant;
 
 // The struct will hold the learned weights and the adagrad updating weights
@@ -52,184 +49,142 @@ impl Train {
         return self.w_context.clone();
     }
 
-    fn weighting_x(xs: &mut Array2<f32>, x_max: f32, alpha: f32) {
-        // this is the implementation of f(x) from the GloVe algorithm
-        xs.mapv_inplace(|x| { 
-            if x < x_max {
-                (x / x_max).powf(alpha)
-            } else { 
-                1.0
-            }
-        });
-    }
-
     fn compute_loss_and_grads(
-        xs: &Array2<f32>,
+        xs: f32,
         x_max: f32,
         alpha: f32,
-        this_batch: usize,
-        weights: &Vec<Array2<f32>>
-     ) -> Result<(Array2<f32>, [Array2<f32>; 4]), Box<dyn Error>> {
+        v_tok: &ArrayViewMut1<f32>,
+        v_context: &ArrayViewMut1<f32>,
+        b_tok: f32,
+        b_context: f32
+     ) -> Result<(f32, (Array1<f32>, Array1<f32>, f32, f32)), Box<dyn Error>> {
 
         // this part performs both "forward" and "backward" passing for a single (batched) example xs
         // return a tuple of score of forward (loss) for the batch, and gradients for the batch
 
-        let v_tok = weights.get(0).ok_or("no v_tok given")?;
-        let v_context = weights.get(1).ok_or("no v_context given")?;
-        let b_tok = weights.get(2).ok_or("no b_tok given")?;
-        let b_context = weights.get(3).ok_or("no b_context given")?;
-
         // -- start of forward computation --
         // xs is of shape (this_batch, 1)
-        let mut xs_weighted: Array2<f32> = xs.clone();
-        Train::weighting_x(&mut xs_weighted, x_max, alpha);
+        let xs_weighted = if xs < x_max { (xs / x_max).powf(alpha) } else { 1.0 };
 
         // w_tok * w_context should be of shape => (this_batch, emebedding_dim) * (this_batch, emebedding_dim) => (this_batch, 1),
         // doing it by element-wise multiplication followed by sum over the rows. In turn diff is also (this_batch, 1)
-        let dp: Array2<f32> = (v_tok * v_context).sum_axis(Axis(1)).to_shape((this_batch, 1))?.to_owned();
-        let diff: Array2<f32> = &dp + b_tok + b_context - &xs.mapv(f32::ln);
+        let diff =  v_tok.dot(v_context) + b_tok + b_context - xs.ln();
 
         // compute loss for batch based on learning formula of GloVe
-        let local_batch_loss: Array2<f32> = 0.5 * &xs_weighted * &diff.mapv(|x| x.powi(2));
+        let local_batch_loss = 0.5 * xs_weighted * diff.powi(2);
         // -- end of forward computation --
 
         // -- backward computation --
         // dl_dw_tok, dl_dw_context are (this_batch, embedding_dim)
         // dl_db is (this_batch, 1)
-        let dl_dw = &xs_weighted * &diff;
-        let dl_dw_tok: Array2<f32> = v_context * &dl_dw;
-        let dl_dw_context: Array2<f32> = v_tok * &dl_dw;
-        let dl_db: Array2<f32> = dl_dw.clone();
+        let dl_dw = xs_weighted * diff;   // let dl_dw = dl_dw.min(100.0).max(-100.0); // need clip?
+        let dl_dw_tok = dl_dw * v_context;
+        let dl_dw_context = dl_dw * v_tok;
+        let dl_db = dl_dw.clone();
         // corresponding to:
         // cost = 0.5 * f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)) **2 )
         // dx_dw_i = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_j
         // dx_dw_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_i
         // dx_db_i = dx_db_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)
 
-        Ok((local_batch_loss, [dl_dw_tok, dl_dw_context, dl_db.clone(), dl_db]))
+        Ok((local_batch_loss, (dl_dw_tok, dl_dw_context, dl_db, dl_db)))
 
 
     }
 
     fn do_training_slice(&mut self, 
-           slice_arr: &Array2<f32>,
-           train_params: &JsonTrain,
-           progress_params: &mut DisplayProgress,
-        ) -> Result<(), Box<dyn Error>> {
+        slice_arr: &Array2<f32>,
+        train_params: &JsonTrain,
+        progress_params: &mut DisplayProgress,
+     ) -> Result<(), Box<dyn Error>> {
 
-            // this method runs a training step to a slice of coocurences that was saved
-            // extract the example, run throught forward and graident computation, updates
-            // weights and adagrad weights.
-            // If later moved to training in threads with locks, this would be done in different threads.
+         // this method runs a training step to a slice of coocurences that was saved
+         // extract the example, run throught forward and graident computation, updates
+         // weights and adagrad weights.
+         // If later moved to training in threads with locks, this would be done in different threads.
 
-            // train parameters extraction
-            let batch_size = train_params.batch_size;
-            let x_max = train_params.x_max;
-            let alpha = train_params.alpha;
-            let learning_rate = train_params.learning_rate;
+         // train parameters extraction
+         let x_max = train_params.x_max;
+         let alpha = train_params.alpha;
+         let learning_rate = train_params.learning_rate;
 
-            // progress_parameters extraction
-            let epoch_loss = &mut progress_params.epoch_loss;
-            let total_loss = &mut progress_params.total_loss;
-            let n_slices = progress_params.n_slices;
-            let slice_enumeration = progress_params.slice_enumeration;
-            let current_slice = progress_params.current_slice;
-            let slice_n_examples = *progress_params.total_examples.get(current_slice).unwrap() as f32;
-            println!("in slice {} / {}, number of total examples here: {}", slice_enumeration, n_slices, slice_n_examples);
+         // progress_parameters extraction
+         let epoch_loss = &mut progress_params.epoch_loss;
+         let total_loss = &mut progress_params.total_loss;
+         let n_slices = progress_params.n_slices;
+         let slice_enumeration = progress_params.slice_enumeration;
+         let current_slice = progress_params.current_slice;
+         let slice_n_examples = *progress_params.total_examples.get(current_slice).unwrap() as f32;
+         println!("in slice {} / {}, number of total examples here: {}", slice_enumeration, n_slices, slice_n_examples);
 
-            // shuffle the inner order of examples within the slice
-            let slice_len = slice_arr.dim().0;
-            let mut in_slice_order = (0..slice_len).into_iter().collect::<Vec<usize>>();
-            in_slice_order.shuffle(&mut thread_rng());
+         // shuffle the inner order of examples within the slice
+         let slice_len = slice_arr.dim().0;
+         let mut in_slice_order = (0..slice_len).into_iter().collect::<Vec<usize>>();
+         in_slice_order.shuffle(&mut thread_rng());
 
-            // split slice to chunks based on batch_size
-            let slice_chunks_indexes: Chunks<usize> = in_slice_order.chunks(batch_size);
+         // run training step to each batch
+         for (pp, example_index) in in_slice_order.iter().enumerate() {
 
-            // run training step to each batch
-            for (pp, chunk_indexes) in slice_chunks_indexes.enumerate() {
+             // print some progress , last batch can be smaller than batch_size
+             let c_bar = 1000000;
+             if pp % c_bar == 0 && pp > 0 {
+                 let progress = (((1 * pp) as f32 / slice_n_examples) * 100.0).floor();
+                 println!("in slice {} / {}, {}%", slice_enumeration, n_slices, progress);
+             }
 
-                // print some progress , last batch can be smaller than batch_size
-                let this_batch = chunk_indexes.len();
-                let c_bar = 100000;
-                if pp % c_bar == 0 && pp > 0 {
-                    let progress = (((this_batch * pp) as f32 / slice_n_examples) * 100.0).floor();
-                    println!("in slice {} / {}, {}%", slice_enumeration, n_slices, progress);
-                }
+             let example = slice_arr.slice(s![*example_index, ..]); // (3,1)
+             let is = example[0] as usize;
+             let js = example[1] as usize;
+             let xs = example[2];
+             
+             // dimensions of (embedding_dim,) for v_tok, v_context
+             // dimensions of (1,) for b_tok, b_context
+             let mut v_tok: ArrayViewMut1<f32> = self.w_tokens.slice_mut(s![is, ..]);
+             let mut v_context: ArrayViewMut1<f32> = self.w_context.slice_mut(s![js, ..]);
+             let b_tok = self.b_tokens.get_mut((is, 0)).ok_or("did not find index")?;
+             let b_context = self.b_context.get_mut((js, 0)).ok_or("did not find index")?;             
 
-                // these are the indexes of data to take from the slice and work on
-                let get_indexes = |col: usize| -> Vec<usize> {
-                    slice_arr
-                    .select(Axis(0), chunk_indexes)
-                    .slice(s![.., col])
-                    .to_shape(this_batch)
-                    .expect("slice shape doesn't fit to specified batch size")
-                    .to_vec()
-                    .iter()
-                    .map(|x| *x as usize)
-                    .collect::<Vec<usize>>()
-                };
-                let is = &get_indexes(0);
-                let js = &get_indexes(1);
-                let xs: Array2<f32> = slice_arr.select(Axis(0), chunk_indexes)
-                .slice(s![.., 2usize]).map(|x| *x).to_shape((this_batch, 1))?.to_owned();
+             let (local_batch_loss, (dl_dw_tok, dl_dw_context, dl_db_tok, dl_db_context)): (f32, (Array1<f32>, Array1<f32>, f32, f32)) = Train::compute_loss_and_grads(xs, x_max, alpha, &v_tok, &v_context, *b_tok, *b_context)?;
 
-                // dimensions of (this_batch, embedding_dim) for v_tok, v_context
-                // dimensions of (this_batch, 1) for b_tok, b_context
-                let v_tok: Array2<f32> = self.w_tokens.select(Axis(0), is);
-                let v_context: Array2<f32> = self.w_context.select(Axis(0), js);
-                let b_tok: Array2<f32> = self.b_tokens.select(Axis(0), is);
-                let b_context: Array2<f32> = self.b_context.select(Axis(0), js);                
-                let weights: Vec<Array2<f32>> = vec![v_tok, v_context, b_tok, b_context];
+             // I am using a mean over the batch since if I would sum over all examples, epoch_loss & total_loss
+             // would (in the worst case) have to hold a size that can be above 32bit. By using batch_size avg,
+             // this number is bounded to total_examples / batch_size. However, i am not enforcing batch_size > some k
+             *epoch_loss += local_batch_loss;
+             *total_loss += 1.0;
 
-                // get the rows of the adagrad gradients
-                // dimensions of (this_batch, embedding_dim) for v_tok, v_context
-                // dimensions of (this_batch, 1) for b_tok, b_context
-                let mut g_v_tok: Array2<f32> = self.ag_w_tok.select(Axis(0), is);
-                let mut g_v_context: Array2<f32> = self.ag_w_context.select(Axis(0), js);
-                let mut g_b_tok: Array2<f32> = self.ag_b_tok.select(Axis(0), is);
-                let mut g_b_context: Array2<f32> = self.ag_b_context.select(Axis(0), js);
 
-                let (local_batch_loss, [dl_dw_tok, dl_dw_context, dl_db_tok, dl_db_context]): (Array2<f32>, [Array2<f32>; 4]) = Train::compute_loss_and_grads(&xs, x_max, alpha, this_batch, &weights)?;
-                
-                // I am using a mean over the batch since if I would sum over all examples, epoch_loss & total_loss
-                // would (in the worst case) have to hold a size that can be above 32bit. By using batch_size avg,
-                // this number is bounded to total_examples / batch_size. However, i am not enforcing batch_size > some k
-                let local_loss = local_batch_loss.mean().ok_or("problem in loss calculation")?;
-                *epoch_loss += local_loss;
-                *total_loss += 1.0;
+             // get the rows of the adagrad gradients
+             // dimensions of (this_batch, embedding_dim) for v_tok, v_context
+             // dimensions of (this_batch, 1) for b_tok, b_context
+             let mut g_v_tok: ArrayViewMut1<f32> = self.ag_w_tok.slice_mut(s![is, ..]);
+             let mut g_v_context: ArrayViewMut1<f32> = self.ag_w_context.slice_mut(s![js, ..]);
+             let g_b_tok = self.ag_b_tok.get_mut((is, 0)).ok_or("did not find index")?;
+             let g_b_context = self.ag_b_context.get_mut((js, 0)).ok_or("did not find index")?;    
 
-                // the full derivative updates
-                // if sqrt is zero somthing went wrong...
-                let dw_tok_update: &Array2<f32> = &(learning_rate * &dl_dw_tok / &g_v_tok.mapv(f32::sqrt));
-                let dw_context_update: &Array2<f32> = &(learning_rate * &dl_dw_context / &g_v_context.mapv(f32::sqrt));
-                let db_tok_update: &Array2<f32> = &(learning_rate * &dl_db_tok / &g_b_tok.mapv(f32::sqrt));
-                let db_context_update: &Array2<f32> = &(learning_rate * &dl_db_context / &g_b_context.mapv(f32::sqrt));
 
-                // the full adagrad update
-                g_v_tok = &dl_dw_tok * &dl_dw_tok;
-                g_v_context = &dl_dw_context * &dl_dw_context;
-                g_b_tok = &dl_db_tok * &dl_db_tok;
-                g_b_context = &dl_db_context * &dl_db_context;
+             // the full derivative updates
+             // if sqrt is zero somthing went wrong...
+             let dw_tok_update: &Array1<f32> = &(learning_rate * &dl_dw_tok / &g_v_tok.mapv(f32::sqrt));
+             let dw_context_update: &Array1<f32> = &(learning_rate * &dl_dw_context / &g_v_context.mapv(f32::sqrt));
+             let db_tok_update: f32 = learning_rate * dl_db_tok / (g_b_tok.sqrt());
+             let db_context_update: f32 = learning_rate * dl_db_context / (g_b_context.sqrt());
 
-                // update by index, done in a loop since no select_mut by non-consecutive indexes is available
-                for (ll, (ii, jj)) in zip(is, js).enumerate() {
-                    // weights update
-                    self.w_tokens.slice_mut(s![*ii, ..]).sub_assign(&dw_tok_update.slice(s![ll, ..]));
-                    self.w_context.slice_mut(s![*jj, ..]).sub_assign(&dw_context_update.slice(s![ll, ..]));
-                    self.b_tokens.slice_mut(s![*ii, ..]).sub_assign(&db_tok_update.slice(s![ll, ..]));
-                    self.b_context.slice_mut(s![*jj, ..]).sub_assign(&db_context_update.slice(s![ll, ..]));
-                    // grad update
-                    self.ag_w_tok.slice_mut(s![*ii, ..]).add_assign(&g_v_tok.slice(s![ll, ..]));
-                    self.ag_w_context.slice_mut(s![*jj, ..]).add_assign(&g_v_context.slice(s![ll, ..]));
-                    self.ag_b_tok.slice_mut(s![*ii, ..]).add_assign(&g_b_tok.slice(s![ll, ..]));
-                    self.ag_b_context.slice_mut(s![*jj, ..]).add_assign(&g_b_context.slice(s![ll, ..]));
+             // the full adagrad update
+             g_v_tok += &(&dl_dw_tok * &dl_dw_tok);
+             g_v_context += &(&dl_dw_context * &dl_dw_context);
+             *g_b_tok += dl_db_tok * dl_db_tok;
+             *g_b_context += dl_db_context * dl_db_context;
 
-                }
-            }
+             // weights update
+             v_tok -= dw_tok_update;
+             v_context -= dw_context_update;
+             *b_tok -= db_tok_update;
+             *b_context -= db_context_update;
+         }
 
-        Ok(())
+     Ok(())
 
-    }
+ }
 
 
     fn train(&mut self, x_mat: Vec<Array2<f32>>, train_params: &JsonTrain) -> Result<(), Box<dyn Error>> {
@@ -373,7 +328,7 @@ impl DisplayProgress {
 #[cfg(test)]
 mod tests {
 
-    use ndarray::{Array2, Array, array};
+    use ndarray::{Array, array, Array1};
     use ndarray_rand::{RandomExt, rand_distr::Uniform};
     use ndarray_stats::QuantileExt;
     use super::Train;
@@ -388,69 +343,67 @@ mod tests {
         let x_values = vec![50.0, 0.05, 43.01, 101.1, 0.002];
         for x_val in x_values {
 
-            let input: Vec<f32> = vec![x_val];
+            let input: f32 = x_val;
             let embedding_dim = 100;
-            let batch_size = input.len();
             let x_max = 100.0;
             let alpha = 0.75;
             let epsilon = 0.01;
-            assert_eq!(1, batch_size);
+            let vec_dim = [embedding_dim, embedding_dim, 1, 1];
 
-            // weights are initalized as they would in Train::new()
-            let x = Array2::from_shape_vec((batch_size, 1), input).unwrap();
-            let w_i = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
-            let w_j = Array::random((batch_size, embedding_dim), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
-            let b_i = Array::random((batch_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
-            let b_j = Array::random((batch_size, 1), Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
-            let weights: Vec<Array2<f32>> = vec![w_i, w_j, b_i, b_j];
-
-            // compute gradients on x and weights using Train
-            let (_, gradients): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights) {
-                Ok(res) => res,
+            // weights are initalized as they would in Train::new(), but for a single entry
+            let mut w_i = Array::random(vec_dim[0], Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let mut w_j = Array::random(vec_dim[1], Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let b_i = Array::random(vec_dim[2], Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            let b_j = Array::random(vec_dim[3], Uniform::new(-0.5, 0.5)) / embedding_dim as f32;
+            
+             // dimensions of (embedding_dim,) for v_tok, v_context
+             // dimensions of (1,) for b_tok, b_context           
+             let (_, gradients): (f32, [Array1<f32>; 4]) = match Train::compute_loss_and_grads(input, x_max, alpha, &w_i.view_mut(), &w_j.view_mut(), b_i[0], b_j[0]) {
+                Ok(res) => {
+                    // pack gradients - a workaround for the loop below
+                    let (local_batch_loss, (dw_i, dw_j, db_i, db_j)) = res;
+                    let grad_array = [dw_i, dw_j, Array1::from_elem(1, db_i), Array1::from_elem(1, db_j)];
+                    (local_batch_loss, grad_array)
+                },
                 Err(e) => panic!("{}", e)
-            };
+             };
 
+
+            let weights: [Array1<f32>; 4] =  [w_i, w_j, b_i, b_j];
+            let mut weights_copy = weights.clone();
             // compute aprroximation of gradients based on forward of w+epsilon and forward of w-epsilon
-            let mut weights_copy: Vec<Array2<f32>> = weights.clone();
-            for (i, weight) in weights.iter().enumerate() {
+            for i in 0..=3 {
 
-                // weight is (1, embedding_size)
-                for ((r, c), _v) in weight.indexed_iter() {
-                    assert_eq!(r, 0);
+                for r in 0..vec_dim[i] {
+
                     {
-                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    let val = weights_copy[i].get_mut(r).ok_or("could not find index").unwrap();
                     *val += epsilon;
                     }
-                    //assert_eq!(*weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v + epsilon);
-                    let (plus, _): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights_copy) {
+                    let [ref mut copy_w_i, ref mut copy_w_j, ref copy_b_i, ref copy_b_j] = weights_copy;
+                    let (plus, _): (f32, (Array1<f32>, Array1<f32>, f32, f32)) = match Train::compute_loss_and_grads(input, x_max, alpha, &copy_w_i.view_mut(), &copy_w_j.view_mut(), copy_b_i[0], copy_b_j[0]) {
                         Ok(res) => res,
                         Err(e) => panic!("{}", e)
                     };
 
                     {
-                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    let val = weights_copy[i].get_mut(r).ok_or("could not find index").unwrap();
                     *val -= 2.0*epsilon;
                     }
-                    //assert_eq!(*weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v - epsilon);
-                    let (minus, _): (Array2<f32>, [Array2<f32>; 4]) = match Train::compute_loss_and_grads(&x, x_max, alpha, batch_size, &weights_copy) {
+                    let [ref mut copy_w_i, ref mut copy_w_j, ref copy_b_i, ref copy_b_j] = weights_copy;
+                    let (minus, _): (f32, (Array1<f32>, Array1<f32>, f32, f32)) = match Train::compute_loss_and_grads(input, x_max, alpha,&copy_w_i.view_mut(), &copy_w_j.view_mut(), copy_b_i[0], copy_b_j[0]) {
                         Ok(res) => res,
                         Err(e) => panic!("{}", e)
                     };
 
                     {
-                    let val = weights_copy.get_mut(i).unwrap().get_mut([r,c]).unwrap();
+                    let val = weights_copy[i].get_mut(r).ok_or("could not find index").unwrap();
                     *val += epsilon;
                     }
-                    //assert_eq!(weights_copy.get(i).unwrap().get([r,c]).unwrap(), _v);
 
-                    // compare per example in batch. (1, 1) becuse batch size is 1
-                    assert_eq!((&plus).dim(), (1,1));
-                    let plus = plus[[0,0]];
-                    assert_eq!((&minus).dim(), (1,1));
-                    let minus = minus[[0,0]];
-
+                    // compare per parameter
                     let prediction_grad = (plus - minus) / (2.0 * epsilon);
-                    let gold_grad = gradients[i][[r, c]];
+                    let gold_grad = gradients[i][r];
 
                     let difference = (prediction_grad - gold_grad).abs() / array![1.0, prediction_grad.abs(), gold_grad.abs()].max().unwrap();
                     assert!(difference < epsilon, "failed, difference is {}", difference);

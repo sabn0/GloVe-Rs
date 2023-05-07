@@ -41,7 +41,6 @@ pub struct JsonTrain {
     pub learning_rate: f32,
     pub x_max: f32,
     pub alpha: f32,
-    pub batch_size: usize,
     pub num_threads_training: usize
 }
 
@@ -56,9 +55,8 @@ impl Display for JsonTrain {
             learning_rate: {},
             x_max: {},
             alpha: {},
-            batch_size: {},
             num_threads_training: {}",
-        self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.batch_size, self.num_threads_training
+        self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.num_threads_training
         )
     }
 }
@@ -134,7 +132,6 @@ impl Config {
         let max_iter = validate_positive_integer("max_iter", 50);
         let embedding_dim = validate_positive_integer("embedding_dim", 300);
         let x_max = validate_positive_integer("x_max", 100);
-        let batch_size = validate_positive_integer("batch_size", 32);
         let num_threads_cooc = validate_positive_integer("num_threads_cooc", 4);
         let num_threads_training = validate_positive_integer("num_threads_training", 1);
         let window_size = validate_positive_integer("window_size", 10);
@@ -154,8 +151,7 @@ impl Config {
                 embedding_dim: embedding_dim as usize, 
                 learning_rate: learning_rate as f32, 
                 x_max: x_max as f32, 
-                alpha: alpha as f32, 
-                batch_size: batch_size as usize, 
+                alpha: alpha as f32,
                 num_threads_training: num_threads_training as usize 
             }
         };
@@ -356,7 +352,6 @@ mod tests {
             "learning_rate": 0.21, 
             "x_max": 1, 
             "alpha": 0.01,
-            "batch_size": 1, 
             "num_threads_training": 1, 
 
         });
@@ -375,7 +370,6 @@ mod tests {
         assert_eq!(params.json_train.learning_rate, 0.21);
         assert_eq!(params.json_train.x_max, 1 as f32);
         assert_eq!(params.json_train.alpha, 0.01);
-        assert_eq!(params.json_train.batch_size, 1);
         assert_eq!(params.json_train.num_threads_training, 1);
 
 
@@ -483,20 +477,6 @@ mod tests {
             "corpus_file": "some string",
             "output_dir": "some string",
             "x_max": 1.0,
-        });
-
-        if let Err(e)= Config::validate(json) {
-            panic!("{}", e);
-        }
-    }
-
-    #[test]
-    fn config_test_batch_size() {
-
-        let json: Value = json!({
-            "corpus_file": "some string",
-            "output_dir": "some string",
-            "batch_size": 89,
         });
 
         if let Err(e)= Config::validate(json) {
