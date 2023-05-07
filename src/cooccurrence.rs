@@ -96,7 +96,8 @@ impl Counts {
         tup2cooc: &mut HashMap<(usize, usize), f32>, 
         t2i: &HashMap<String, usize>, 
         slice: &Range<usize>, 
-        thread_i: Option<usize>) -> Result<(), Box<dyn Error>> {
+        thread_i: Option<usize>,
+        progress_verbose: bool) -> Result<(), Box<dyn Error>> {
 
             // this method counts cooccurrences of tokens in the vocabulary based on the GloVe algorithm.
             // it populates `tup2count` by the counts of the items in `t2i` in `sequences`, using the given
@@ -109,7 +110,7 @@ impl Counts {
             let n = sequences.len();
             for (_k, sequence) in sequences.iter().enumerate() {
 
-                if thread_i.is_some() && _k % 200000 == 0 {
+                if progress_verbose && thread_i.is_some() && _k % 200000 == 0 {
                     println!("within thread {}, counted {}",thread_i.unwrap(), 100.0*(_k as f32 / n as f32));
                 }
 
@@ -162,24 +163,30 @@ impl Counts {
     }
 
 
-    fn run_thread(window_size: usize, sequences: &Vec<Vec<String>>, t2i: &HashMap<String, usize>, slice: &Range<usize>, thread_i: usize) -> Vec<u8> {
+    fn run_thread(window_size: usize,
+        sequences: &Vec<Vec<String>>,
+        t2i: &HashMap<String, usize>, 
+        slice: &Range<usize>, 
+        thread_i: usize,
+        progress_verbose: bool) -> Vec<u8> {
 
         // each thread handles a different slice of token_ids from the vocabulary when counting
         // the counts are mapped to ndarray and saved in compression.
 
         println!("thread {}, working on vocab slice {:?}", thread_i, slice);
         let mut tup2cooc: HashMap<(usize, usize), f32> = HashMap::new();
-        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc, &t2i, slice, Some(thread_i)) {
+        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc, &t2i, slice, Some(thread_i), progress_verbose) {
             panic!("{}", e);
         };
 
-        println!("thread {} founds n rows: {}", thread_i, &tup2cooc.len());
-
+        if progress_verbose {
+            println!("thread {} founds n rows: {}", thread_i, &tup2cooc.len());
+        }
+        
         let mut save_item: Array2<f32> = Array2::from_elem((tup2cooc.len(), 3), 0.0);
         Counts::map_to_ndarray(&tup2cooc, &mut save_item);
         let save_item = serialize(&save_item).expect("could not serialize nd array");
 
-        println!("finished thread {}, vocab slice {:?}", thread_i, slice);
         save_item
 
     }    
@@ -194,6 +201,7 @@ impl Counts {
         let input_file = params.corpus_file.as_ref();
         let mut vocab_size = params.json_train.vocab_size;
         let window_size = params.window_size;
+        let progress_verbose = params.json_train.progress_verbose;
         let use_os = true; // wrap sequences with SOS and EOS
         let use_shuffle = true; // shuffle vocabulary order
 
@@ -224,13 +232,13 @@ impl Counts {
         let slices: Vec<Range<usize>> = (0..t2i.len()).step_by(in_parts_size).map(|i| i..i+in_parts_size).collect();
         ThreadPoolBuilder::new().num_threads(params.num_threads_cooc).build_global()?;
         let counts_by_slices: Vec<Vec<u8>> = slices.par_iter().enumerate().map( |(thread_i, slice)| {
-            Counts::run_thread(window_size, &sequences, &t2i, slice, thread_i)
+            Counts::run_thread(window_size, &sequences, &t2i, slice, thread_i, progress_verbose)
         }).collect();
 
         // save the counts and tokens
         config::files_handling::save_output::<Vec<Vec<u8>>>(&params.output_dir, "cooc", counts_by_slices)?;
         config::files_handling::save_output::<HashMap<String, usize>>(&params.output_dir, "words", t2i.clone())?;
-        println!("saved as zip files");
+        println!("finished threads, saved as zip files");
 
         Ok(())
 
@@ -275,6 +283,7 @@ mod tests {
         let vocab_size = 3; // only conisder top 3 most common, [are, you, a]
         let window_size = 10; // words to the right (symmatry is computed before training, not here)
         let slice = 0..vocab_size; // do in one pass
+        let progress_verbose = false;
         let use_os = false;
         let use_shuffle = false;
 
@@ -299,7 +308,7 @@ mod tests {
         Counts::build_vocab(token2count_alg, vocab_size, &mut t2i_alg, use_shuffle);
 
         let mut tup2cooc_alg: HashMap<(usize, usize), f32> = HashMap::new();
-        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc_alg, &t2i_alg, &slice, None) {
+        if let Err(e) = Counts::count(window_size, &sequences, &mut tup2cooc_alg, &t2i_alg, &slice, None, progress_verbose) {
             panic!("{}", e);
         };
 

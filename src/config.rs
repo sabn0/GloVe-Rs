@@ -14,7 +14,7 @@ pub struct JsonTypes {
     pub corpus_file: String,
     pub output_dir: String,
     pub window_size: usize,
-    pub saved_counts: Option<bool>,
+    pub saved_counts: bool,
     pub num_threads_cooc: usize,
     pub json_train: JsonTrain
 }
@@ -25,7 +25,7 @@ impl Display for JsonTypes {
         corpus_file: {}
         output_dir: {}
         window_size: {}
-        saved_counts: {:?}
+        saved_counts: {}
         num_threads_cooc: {},
         {}",
         self.corpus_file, self.output_dir, self.window_size, self.saved_counts, self.num_threads_cooc, self.json_train)
@@ -41,7 +41,8 @@ pub struct JsonTrain {
     pub learning_rate: f32,
     pub x_max: f32,
     pub alpha: f32,
-    pub num_threads_training: usize
+    pub num_threads_training: usize,
+    pub progress_verbose: bool
 }
 
 
@@ -55,8 +56,9 @@ impl Display for JsonTrain {
             learning_rate: {},
             x_max: {},
             alpha: {},
-            num_threads_training: {}",
-        self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.num_threads_training
+            num_threads_training: {}
+            progress_verbose: {}",
+        self.vocab_size, self.max_iter, self.embedding_dim, self.learning_rate, self.x_max, self.alpha, self.num_threads_training, self.progress_verbose
         )
     }
 }
@@ -90,9 +92,9 @@ impl Config {
             .expect(format!("cannot cast {} to string", field).as_str())
         };
 
-        let validate_bool = |field: &str, default_val: Option<bool>| {
+        let validate_bool = |field: &str, default_val: bool| {
             match json.get(field) {
-                Some(val) => Some(val.as_bool().expect(format!("panic since given {} is not boolean", field).as_str())),
+                Some(val) => val.as_bool().expect(format!("panic since given {} is not boolean", field).as_str()),
                 None => default_val
             }
         };
@@ -137,7 +139,8 @@ impl Config {
         let window_size = validate_positive_integer("window_size", 10);
         let learning_rate = validate_float("learning_rate", 0.05);
         let alpha = validate_float("alpha", 0.75);
-        let saved_counts = validate_bool("saved_counts", None);
+        let saved_counts = validate_bool("saved_counts", false);
+        let progress_verbose = validate_bool("progress_verbose", false);
 
         let params = JsonTypes {
             corpus_file: corpus_file.to_owned(),
@@ -152,7 +155,8 @@ impl Config {
                 learning_rate: learning_rate as f32, 
                 x_max: x_max as f32, 
                 alpha: alpha as f32,
-                num_threads_training: num_threads_training as usize 
+                num_threads_training: num_threads_training as usize,
+                progress_verbose: progress_verbose, 
             }
         };
 
@@ -345,6 +349,7 @@ mod tests {
             "output_dir": "some string",
             "window_size": 1,
             "saved_counts": false,
+            "progress_verbose": true,
             "num_threads_cooc": 1,
             "vocab_size": 1, 
             "max_iter": 2, 
@@ -362,8 +367,9 @@ mod tests {
         };
 
         assert_eq!(params.window_size, 1);
-        assert_eq!(params.saved_counts, Some(false));
+        assert_eq!(params.saved_counts, false);
         assert_eq!(params.num_threads_cooc, 1);
+        assert_eq!(params.json_train.progress_verbose, true);
         assert_eq!(params.json_train.vocab_size, 1);
         assert_eq!(params.json_train.max_iter, 2);
         assert_eq!(params.json_train.embedding_dim, 3);
@@ -477,6 +483,20 @@ mod tests {
             "corpus_file": "some string",
             "output_dir": "some string",
             "x_max": 1.0,
+        });
+
+        if let Err(e)= Config::validate(json) {
+            panic!("{}", e);
+        }
+    }
+
+    #[test]
+    fn config_test_progress_verbose() {
+
+        let json: Value = json!({
+            "corpus_file": "some string",
+            "output_dir": "some string",
+            "progress_verbose": false,
         });
 
         if let Err(e)= Config::validate(json) {

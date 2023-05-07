@@ -32,7 +32,7 @@ impl Pipeline {
         };
 
         // run the cooccurrences count stage if not saved and given already
-        if params.saved_counts.is_none() || params.saved_counts.unwrap() == false {
+        if !params.saved_counts {
 
             let timer = Instant::now();
             println!("{}", params);

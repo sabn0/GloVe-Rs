@@ -80,7 +80,7 @@ impl Train {
         let dl_dw = xs_weighted * diff;   // let dl_dw = dl_dw.min(100.0).max(-100.0); // need clip?
         let dl_dw_tok = dl_dw * v_context;
         let dl_dw_context = dl_dw * v_tok;
-        let dl_db = dl_dw.clone();
+        let dl_db = dl_dw;
         // corresponding to:
         // cost = 0.5 * f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)) **2 )
         // dx_dw_i = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_j
@@ -107,6 +107,7 @@ impl Train {
          let x_max = train_params.x_max;
          let alpha = train_params.alpha;
          let learning_rate = train_params.learning_rate;
+         let verbose = train_params.progress_verbose;
 
          // progress_parameters extraction
          let epoch_loss = &mut progress_params.epoch_loss;
@@ -126,13 +127,12 @@ impl Train {
          for (pp, example_index) in in_slice_order.iter().enumerate() {
 
              // print some progress , last batch can be smaller than batch_size
-             let c_bar = 1000000;
-             if pp % c_bar == 0 && pp > 0 {
+             if verbose && pp % 1000000 == 0 && pp > 0 {
                  let progress = (((1 * pp) as f32 / slice_n_examples) * 100.0).floor();
                  println!("in slice {} / {}, {}%", slice_enumeration, n_slices, progress);
              }
 
-             let example = slice_arr.slice(s![*example_index, ..]); // (3,1)
+             let example = slice_arr.slice(s![*example_index, ..]); // (3,)
              let is = example[0] as usize;
              let js = example[1] as usize;
              let xs = example[2];
