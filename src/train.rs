@@ -81,12 +81,12 @@ impl Train {
         let dl_dw_tok = dl_dw * v_context;
         let dl_dw_context = dl_dw * v_tok;
         let dl_db = dl_dw;
+
         // corresponding to:
         // cost = 0.5 * f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)) **2 )
         // dx_dw_i = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_j
         // dx_dw_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j) * w_i
         // dx_db_i = dx_db_j = f(x_i_j) * (w_i.dot(w_j) + b_i + b_j - ln(x_i_j)
-
         Ok((local_batch_loss, (dl_dw_tok, dl_dw_context, dl_db, dl_db)))
 
 
@@ -123,8 +123,11 @@ impl Train {
          let mut in_slice_order = (0..slice_len).into_iter().collect::<Vec<usize>>();
          in_slice_order.shuffle(&mut thread_rng());
 
+        // extract examples
+        let slice_examples = slice_arr.select(Axis(0), &in_slice_order);
+
          // run training step to each batch
-         for (pp, example_index) in in_slice_order.iter().enumerate() {
+         for (pp, example) in slice_examples.axis_iter(Axis(0)).enumerate() {
 
              // print some progress , last batch can be smaller than batch_size
              if verbose && pp % 1000000 == 0 && pp > 0 {
@@ -132,11 +135,10 @@ impl Train {
                  println!("in slice {} / {}, {}%", slice_enumeration, n_slices, progress);
              }
 
-             let example = slice_arr.slice(s![*example_index, ..]); // (3,)
              let is = example[0] as usize;
              let js = example[1] as usize;
              let xs = example[2];
-             
+
              // dimensions of (embedding_dim,) for v_tok, v_context
              // dimensions of (1,) for b_tok, b_context
              let mut v_tok: ArrayViewMut1<f32> = self.w_tokens.slice_mut(s![is, ..]);
@@ -152,7 +154,6 @@ impl Train {
              *epoch_loss += local_batch_loss;
              *total_loss += 1.0;
 
-
              // get the rows of the adagrad gradients
              // dimensions of (this_batch, embedding_dim) for v_tok, v_context
              // dimensions of (this_batch, 1) for b_tok, b_context
@@ -161,13 +162,13 @@ impl Train {
              let g_b_tok = self.ag_b_tok.get_mut((is, 0)).ok_or("did not find index")?;
              let g_b_context = self.ag_b_context.get_mut((js, 0)).ok_or("did not find index")?;    
 
-
              // the full derivative updates
              // if sqrt is zero somthing went wrong...
-             let dw_tok_update: &Array1<f32> = &(learning_rate * &dl_dw_tok / &g_v_tok.mapv(f32::sqrt));
-             let dw_context_update: &Array1<f32> = &(learning_rate * &dl_dw_context / &g_v_context.mapv(f32::sqrt));
-             let db_tok_update: f32 = learning_rate * dl_db_tok / (g_b_tok.sqrt());
-             let db_context_update: f32 = learning_rate * dl_db_context / (g_b_context.sqrt());
+             // weights update
+             v_tok -= &(learning_rate * &dl_dw_tok / &g_v_tok.mapv(f32::sqrt));
+             v_context -= &(learning_rate * &dl_dw_context / &g_v_context.mapv(f32::sqrt));
+             *b_tok -= learning_rate * dl_db_tok / (g_b_tok.sqrt());
+             *b_context -= learning_rate * dl_db_context / (g_b_context.sqrt());
 
              // the full adagrad update
              g_v_tok += &(&dl_dw_tok * &dl_dw_tok);
@@ -175,11 +176,7 @@ impl Train {
              *g_b_tok += dl_db_tok * dl_db_tok;
              *g_b_context += dl_db_context * dl_db_context;
 
-             // weights update
-             v_tok -= dw_tok_update;
-             v_context -= dw_context_update;
-             *b_tok -= db_tok_update;
-             *b_context -= db_context_update;
+
          }
 
      Ok(())
