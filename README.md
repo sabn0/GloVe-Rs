@@ -24,7 +24,7 @@ By specifying these 2 arguments, the program will run with its default parameter
     "window_size": positive integer
     "vocab_size": positive integer
     "max_iter": positive integer
-    "embedding_dim": posititve integer
+    "embedding_dim": positive integer
     "batch_size": positive integer
     "x_max": positive integer
     "learning_rate": float between 0-1
