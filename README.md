@@ -21,22 +21,20 @@ This is a 100% rust binary code to train a **GloVe** model based on the details 
 By specifying these 2 arguments, the program will run with its default parameters on the `corpus_file`, and save the outputs to `output_dir`. The outputs are: (1) coocurrence counts in a tar.gz archive. (2) trained vector embeddings in a vec.npy file. (3) token-to-int dict in a txt file. You can modify the following parameters by adding them to the json:
 ```javascript
 {
-    "window_size": positive integer
-    "vocab_size": positive integer
-    "max_iter": positive integer
-    "embedding_dim": positive integer
-    "batch_size": positive integer
-    "x_max": positive integer
-    "learning_rate": float between 0-1
-    "alpha": float between 0-1
-    "num_threads_cooc": positive integer
-    "num_threads_training": positive integer
-    "saved_counts": boolean
+    "window_size": positive integer, default 10
+    "vocab_size": positive integer, default 400K
+    "max_iter": positive integer, default 50
+    "embedding_dim": positive integer, default 300
+    "x_max": positive integer, dfault 100
+    "learning_rate": float between 0-1, default 0.05
+    "alpha": float between 0-1, default 0.75
+    "num_threads_cooc": positive integer, default 4
+    "num_threads_training": positive integer, default 1
+    "saved_counts": bool, default false
+    "progress_verbose": bool, default false
 }
 ```
-`num_threads_cooc` specifies how many threads will be used during coocurrence counting. `num_threads_training` is the training 
-equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this field).
-`saved_counts` should be set to true if the coocurrence part was already ran, and you only want to perform training based on a saved tar.gz of coocurrences.
+`num_threads_cooc` specifies how many threads will be used during coocurrence counting. `num_threads_training` is the training equivilanet, but the code does not support parallel threads for the training part at the moment (so avoid changing this field). `saved_counts` should be set to true if the coocurrence part was already ran, and you only want to perform training based on a saved tar.gz of coocurrences.
 
 #### Visualize some relations
 The *test.rs* binary can be used to print some word similarities and analogies based on trained vectors. It expects 4 arguments:
@@ -64,19 +62,19 @@ For a word similarity examination, select b. In the input file, each line should
 Very simple: Each line in the corpus file is stripped of leading and trailing spaces, then lower-cased, and wrapped with SOS and
 EOS tokens. Tokenization is done by spliting on spaces.
 #### Coocurrence
-First counts the occurrences of all unique tokens. Then, creates a vocabulary using the requested `vocab_size` = N most common tokens. Finally, counts cooccurrences between the vocabulary elements in the corpus, following GloVe's details. Coccurrences counting is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing larger vocabularies without memory issues. I set M to 30K, which represents a worst case of 900M entries of token and context pairs. Each portion is saved into an nd array, serialized and compressed. The output is a single tar.gz that contains  N / M files.
+First counts the occurrences of all unique tokens. Then, creates a vocabulary using the requested `vocab_size` = N most common tokens. Finally, counts cooccurrences between the vocabulary elements in the corpus, following GloVe's details. Coccurrences counting is done using M passes over the corpus, each pass counts the coocurrences between a portion of the vocab and the other words. This serves the porpuse of allowing larger vocabularies without memory issues. I set M to 18K, which represents a worst quad case of token-context pairs that still fits in 32 bit. Each portion is saved into an nd array, serialized and compressed. The output is a single tar.gz that contains  N / M files.
 #### Training
-First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. Within each slice, examples are devided to batches based on requested `batch_size`. When done iterating, the trained weights are saved to a vecs.npy file in the `output_dir` location.
+First loads the coocurrences from the tar back to M nd arrays, then runs training following GloVe's details. Done in one thread. The training is done in slices that are based on the calculted M arrays. In each epoch, the order of the slices is randomized, and the order within each slice is also randomized. In each epoch every example is seen once. When done iterating, the trained weights are saved to a vecs.npy file in the `output_dir` location.
 
 ## Testing
-I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. Here are some performance details based on my experiement, running the entire training pipeline in release:
+I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceairesearch.com/the-wikitext-long-term-dependency-language-modeling-dataset/). After removing headlines and empty lines, I accounted for **~100M tokens**, which translated to a vocabulary of **~230K tokens** after split by space. I ran training in release for 10 epochs, in a single thread on my machine. Here are some performance details based on my experiement:
 
 | part | time | N threads | output weight |
 | :--: |  :-------: | :-------: | :-------: |
-| **coocurrence** | ~ 4 minutes | 4 | tar.gz around 700MB |
-| **training**    | ~ 18 minutes per epoch |  1  |  npy around 275MB |
+| **coocurrence** | ~ 5 minutes | 4 | tar.gz ~ 700MB |
+| **training**    | ~ 12 minutes per epoch |  1  |  npy ~ 275MB |
 
-I ran training for 10 epochs. I did not run a full word analogy test after training, but I did inspect some manuall inputs for sanity. Here are some examples I got:
+I did not run a full word analogy test after training, but I did inspect some manual inputs for sanity. Here are some examples I got:
 
 <table>
 <tr>
@@ -88,22 +86,22 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 
 | 0 | student | student | 0.99999994 |
 | :--: |  :-------: | :-------: | :-------: |
-| 1 | student | graduate | 0.8040225 |
-| 2 | student | faculty | 0.78390074 |
-| 3 | student | students | 0.77575016 |
-| 4 | student | undergraduate | 0.72798145 |
-| 5 | student | academic | 0.7142711 |
+| 1 | student | graduate | 0.7880817 |
+| 2 | student | students | 0.7841824 |
+| 3 | student | faculty | 0.7772908 |
+| 4 | student | school | 0.72709715 |
+| 5 | student | academic | 0.71540457 |
 
 </td>
 <td>
 
-| 0 | singing | singing | 0.9999999 |
+| 0 | singing | singing | 0.9999998 |
 | :--: |  :-------: | :-------: | :-------: |
-| 1 | singing | dancing | 0.8588408 |
-| 2 | singing | sang | 0.8120471 |
-| 3 | singing | sing | 0.80949867 |
-| 4 | singing | performing | 0.7759678 |
-| 5 | singing | madonna | 0.76943535 |
+| 1 | singing | dancing | 0.8635112 |
+| 2 | singing | sang | 0.811417 |
+| 3 | singing | sing | 0.8004586 |
+| 4 | singing | performing | 0.7680812 |
+| 5 | singing | madonna | 0.75732356 |
 
 </td>
 </tr>
@@ -115,21 +113,20 @@ I ran training for 10 epochs. I did not run a full word analogy test after train
 <tr>
 <td>
 
-| 0 | queen - king + man = woman | 0.77241313 |
+| 0 | queen - king + man = woman | 0.772968 |
 | :--: |  :-------: | :-------: |
-| 1 | queen - king + man = girl | 0.6918511 |
-| 2 | queen - king + man = mother | 0.6108579 |
+| 1 | queen - king + man = girl | 0.7053249 |
+| 2 | queen - king + man = spider | 0.6279296 |
 
 (excluding king, queen and man as possible answers)
 
 </td>
 <td>
 
-| 0 | goes - go + say = says | 0.7782096 |
+| 0 | goes - go + say = says | 0.81027496 |
 | :--: |  :-------: | :-------: |
-| 1 | goes - go + say = knows | 0.71007967 |
-| 2 | goes - go + say = everything | 0.70047474 |
-
+| 1 | goes - go + say = knows | 0.7445646 |
+| 2 | goes - go + say = ? | 0.7409628 |
 
 (excluding go, goes and say as possible answers)
 
