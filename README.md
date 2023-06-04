@@ -3,7 +3,7 @@
 ![example workflow](https://github.com/Sabn0/GloVe-Rs/actions/workflows/rust.yml/badge.svg)
 ![rust version](https://img.shields.io/badge/rust-1.67.1-blue)
 
-This is a 100% pure rust binary code to train a **GloVe** model based on the details in [GloVe's paper](https://aclanthology.org/D14-1162/). I implemented it to experiement with rust in the context of such an NLP model (and it's been great!). The training part is a 3 stage pipeline - (1) data preprocessing, (2) coocurrences counting, (3) training. In addition, I implemented some testing functionalities that enable inspection of word analogies and similarities with the model's output (trained word vectors).
+This is a 100% pure rust binary code to train a **GloVe** model based on the details in [GloVe's paper](https://aclanthology.org/D14-1162/). I implemented it to experiement with rust in the context of such an NLP model (and it's been great!). The training part is a 3 stage pipeline - (1) data preprocessing, (2) coocurrences counting, (3) training. In addition, I implemented some testing functionalities that enable inspection of word analogies + similarities with the model's output (trained word vectors).
 
  ## How to run
  After cloning the repo, build and run the *main.rs* binary in release:
