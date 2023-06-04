@@ -71,8 +71,8 @@ I tested the code using the [**WikiText-103 dataset**](https://blog.salesforceai
 
 | part | time | N threads | output weight |
 | :--: |  :-------: | :-------: | :-------: |
-| **coocurrence** | ~ 5 minutes | 4 | tar.gz ~ 700MB |
-| **training**    | ~ 12 minutes per epoch |  1  |  npy ~ 275MB |
+| **coocurrence** | ~ 4 minutes | 4 | tar.gz ~ 700MB |
+| **training**    | ~ 10 minutes per epoch |  1  |  npy ~ 275MB |
 
 I did not run a full word analogy test after training, but I did inspect some manual inputs for sanity. Here are some examples I got:
 
